@@ -497,7 +497,7 @@ export default function Page() {
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     onPaste={event => pasteIntoTextField(event, title, setTitle)}
-                    className="relative z-10 rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                    className="relative z-10 rounded-[16px] border border-black/15 bg-white px-4 py-3 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
                     placeholder="ProvenanceRegistry"
                     autoComplete="off"
                     spellCheck={false}
@@ -508,7 +508,7 @@ export default function Page() {
                   <input
                     value={currentPreset.description}
                     readOnly
-                    className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-black/60 outline-none"
+                    className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-black/60 caret-black outline-none"
                   />
                 </label>
               </div>
@@ -551,7 +551,7 @@ export default function Page() {
                   value={source}
                   onChange={e => setSource(e.target.value)}
                   onPaste={event => pasteIntoTextField(event, source, setSource)}
-                  className="relative z-10 min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 outline-none transition focus:border-red-600"
+                  className="relative z-10 min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
                   spellCheck={false}
                 />
               </label>
