@@ -406,11 +406,9 @@ export default function Page() {
   const scoreAccent = analysis.score >= 85 ? 'text-black' : analysis.score >= 65 ? 'text-black' : 'text-black';
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#151b3a_0%,#0a0f1f_42%,#050810_100%)] text-white">
-      <div className="mx-auto max-w-[1800px] px-4 py-4 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-4 lg:px-6">
-        <div className="mb-4 lg:mb-0">
-          <TopNav />
-        </div>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#151b3a_0%,#0a0f1f_42%,#050810_100%)] pt-[238px] text-white lg:pt-[198px]">
+      <TopNav />
+      <div className="mx-auto max-w-[1800px] px-4 pb-4 lg:px-6">
         <div className="min-w-0">
           <header className="relative mb-4 overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,20,39,0.96),rgba(8,10,18,0.98))] px-5 py-5 shadow-[0_26px_64px_rgba(0,0,0,0.42)]">
             <div className="absolute inset-0 forge-grid opacity-[0.12]" />
@@ -890,7 +888,7 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
           </Panel>
         </section>
 
-          <footer className="pb-5 pt-4 text-center text-xs text-black/45">
+          <footer className="pb-5 pt-4 text-center text-xs text-white/45">
             Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.
           </footer>
         </div>

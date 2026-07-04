@@ -78,7 +78,7 @@ const PUBLIC_CAMERAS = [
 ] as const;
 
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
+  return <section className={`rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,14,27,0.94),rgba(6,10,18,0.98))] p-5 shadow-[0_20px_54px_rgba(0,0,0,0.34)] ${className}`}>{children}</section>;
 }
 
 function ActionButton({
@@ -89,7 +89,7 @@ function ActionButton({
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:border-cyan-400/30 hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
       {children}
     </button>
@@ -98,10 +98,10 @@ function ActionButton({
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-[18px] border border-black/10 bg-white p-4">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">{label}</p>
-      <p className="mt-2 text-2xl font-black text-black">{value}</p>
-      {hint ? <p className="mt-2 text-sm text-black/55">{hint}</p> : null}
+    <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 backdrop-blur">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">{label}</p>
+      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+      {hint ? <p className="mt-2 text-sm text-white/60">{hint}</p> : null}
     </div>
   );
 }
@@ -592,35 +592,33 @@ export default function OccupancyPage() {
     URL.revokeObjectURL(url);
   }
 
-  const alertTone = occupancy.level === 'ALERT' ? 'bg-red-600 text-white' : occupancy.level === 'WATCH' ? 'bg-black text-white' : 'bg-black/5 text-black';
+  const alertTone = occupancy.level === 'ALERT' ? 'bg-red-600 text-white' : occupancy.level === 'WATCH' ? 'bg-slate-950 text-white' : 'bg-white/5 text-white';
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
-      <div className="mx-auto max-w-[1800px] px-4 py-4 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-4 lg:px-6">
-        <div className="mb-4 lg:mb-0">
-          <TopNav />
-        </div>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#11173a_0%,#090d1a_44%,#050810_100%)] pt-[238px] text-white lg:pt-[198px]">
+      <TopNav />
+      <div className="mx-auto max-w-[1800px] px-4 pb-4 lg:px-6">
         <div className="min-w-0">
-        <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
+        <header className="mb-4 overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(12,16,30,0.96),rgba(7,10,18,0.98))] px-5 py-4 shadow-[0_18px_42px_rgba(0,0,0,0.34)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-black/50">GenLayer Studio</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/50">GenLayer Studio</p>
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Occupancy AI Desk</h1>
-              <p className="mt-1 max-w-3xl text-sm text-black/60">
+              <p className="mt-1 max-w-3xl text-sm text-white/60">
                 Count people live from a webcam feed, draw bounding boxes around bodies, and package each snapshot for GenLayer logging.
               </p>
             </div>
 
             <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-black/10 bg-[#111] px-4 py-3 text-white">
+              <div className="rounded-[18px] border border-white/10 bg-[#111] px-4 py-3 text-white">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">Model</p>
                 <p className="mt-1 text-lg font-black">{loadingModel ? 'Loading' : 'Ready'}</p>
               </div>
-              <div className="rounded-[18px] border border-black/10 bg-[#111] px-4 py-3 text-white">
+              <div className="rounded-[18px] border border-white/10 bg-[#111] px-4 py-3 text-white">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">People</p>
                 <p className="mt-1 text-lg font-black">{count}</p>
               </div>
-              <div className={`rounded-[18px] border border-black/10 px-4 py-3 ${alertTone}`}>
+              <div className={`rounded-[18px] border border-white/10 px-4 py-3 ${alertTone}`}>
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] opacity-60">State</p>
                 <p className="mt-1 text-lg font-black">{occupancy.label}</p>
               </div>
@@ -632,15 +630,15 @@ export default function OccupancyPage() {
           <Panel>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-red-600/20 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-red-700">
+                <div className="inline-flex items-center gap-2 rounded-full border border-red-600/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-red-700">
                   <Camera size={14} /> Live camera
                 </div>
                 <h2 className="mt-3 text-2xl font-black">People tracking</h2>
-                <p className="mt-1 text-sm text-black/60">
+                <p className="mt-1 text-sm text-white/60">
                   Bounding boxes update in real time using a browser model. It counts people only and keeps the experience local.
                 </p>
               </div>
-              <div className="rounded-[18px] border border-black/10 bg-black px-4 py-3 text-white">
+              <div className="rounded-[18px] border border-white/10 bg-slate-950 px-4 py-3 text-white">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">Status</p>
                 <p className="mt-1 text-lg font-black">{status}</p>
               </div>
@@ -649,27 +647,27 @@ export default function OccupancyPage() {
             <div className="mt-5 grid gap-4">
               <div className="grid gap-2 md:grid-cols-2">
                 <label className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Camera label</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Camera label</span>
                   <input
                     value={sourceLabel}
                     onChange={e => setSourceLabel(e.target.value)}
-                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                    className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 outline-none transition focus:border-red-600"
                   />
                 </label>
                 <label className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Location</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Location</span>
                   <input
                     value={location}
                     onChange={e => setLocation(e.target.value)}
-                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                    className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 outline-none transition focus:border-red-600"
                   />
                 </label>
               </div>
 
               <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                 <label className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Zone focus</span>
-                  <div className="grid grid-cols-3 gap-2 rounded-[18px] border border-black/10 bg-black/5 p-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Zone focus</span>
+                  <div className="grid grid-cols-3 gap-2 rounded-[18px] border border-white/10 bg-white/5 p-2">
                     {(['full', 'upper', 'lower'] as const).map(option => {
                       const active = regionMode === option;
                       return (
@@ -678,7 +676,7 @@ export default function OccupancyPage() {
                           type="button"
                           onClick={() => setRegionMode(option)}
                           className={`rounded-full px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] transition ${
-                            active ? 'bg-red-600 text-white' : 'bg-white text-black hover:bg-black/5'
+                            active ? 'bg-red-600 text-white' : 'bg-slate-950/80 text-white hover:bg-white/5'
                           }`}
                         >
                           {option === 'full' ? 'Full frame' : option === 'upper' ? 'Upper half' : 'Lower half'}
@@ -688,19 +686,19 @@ export default function OccupancyPage() {
                   </div>
                 </label>
                 <div className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Active zone</span>
-                  <div className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-sm font-bold">{regionLabel(regionMode)}</div>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Active zone</span>
+                  <div className="rounded-[16px] border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold">{regionLabel(regionMode)}</div>
                 </div>
               </div>
 
-              <div className="rounded-[18px] border border-black/10 bg-white p-4">
+              <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <MapPinned size={16} className="text-red-700" />
                     <h3 className="text-base font-black">Camera stations</h3>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <ActionButton onClick={createStationFromCurrent} className="border border-black/15 bg-white px-3 py-2 text-xs text-black hover:bg-black/5">
+                    <ActionButton onClick={createStationFromCurrent} className="border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white hover:bg-white/5">
                       <Plus size={14} /> New station
                     </ActionButton>
                     <ActionButton onClick={saveStation} className="border border-red-600/20 bg-red-600 px-3 py-2 text-xs text-white hover:bg-red-700">
@@ -715,7 +713,7 @@ export default function OccupancyPage() {
                       return (
                         <div
                           key={station.id}
-                          className={`rounded-[18px] border p-4 ${active ? 'border-red-600 bg-red-50' : 'border-black/10 bg-black/5'}`}
+                          className={`rounded-[18px] border p-4 ${active ? 'border-red-600 bg-red-500/10' : 'border-white/10 bg-white/5'}`}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <button
@@ -724,23 +722,23 @@ export default function OccupancyPage() {
                               className="text-left"
                             >
                               <p className="font-bold">{station.label}</p>
-                              <p className="mt-1 text-xs text-black/55">
+                              <p className="mt-1 text-xs text-white/55">
                                 {station.mode === 'webcam' ? 'Webcam' : station.mode === 'snapshot' ? 'Snapshot bridge' : 'LAN / RTSP / ONVIF'} · {station.location} · {regionLabel(station.region)}
                               </p>
                             </button>
                             <button
                               type="button"
                               onClick={() => removeStation(station.id)}
-                              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 hover:bg-black/5"
+                              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-white/60 hover:bg-white/5"
                             >
                               <Trash2 size={14} /> Remove
                             </button>
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-black/70">
+                            <span className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs font-semibold text-white/70">
                               Threshold {station.threshold}
                             </span>
-                            <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-black/70">
+                            <span className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs font-semibold text-white/70">
                               {station.sourceUrl ? 'Bridge connected' : 'No bridge URL'}
                             </span>
                             {active ? <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white">Active</span> : null}
@@ -749,25 +747,25 @@ export default function OccupancyPage() {
                       );
                     })
                   ) : (
-                    <div className="rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/65">
+                    <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-white/65">
                       No saved stations yet. Save one to reuse the same camera, zone, and threshold later.
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-[18px] border border-black/10 bg-white p-4">
+              <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-4">
                 <div className="flex items-center gap-2">
                   <Camera size={16} className="text-red-700" />
                   <h3 className="text-base font-black">Public demo cameras</h3>
                 </div>
-                <p className="mt-2 text-sm text-black/60">
+                <p className="mt-2 text-sm text-white/60">
                   Curated public webcams for demos and smoke tests. They load through the same proxy the app uses for bridge URLs.
                 </p>
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   {PUBLIC_CAMERAS.map(camera => (
-                    <div key={camera.id} className="overflow-hidden rounded-[18px] border border-black/10 bg-black/5">
-                      <div className="relative aspect-video bg-black">
+                    <div key={camera.id} className="overflow-hidden rounded-[18px] border border-white/10 bg-white/5">
+                      <div className="relative aspect-video bg-slate-950">
                         <img
                           src={proxyCameraUrl(camera.sourceUrl)}
                           alt={camera.name}
@@ -784,7 +782,7 @@ export default function OccupancyPage() {
                           href={camera.pageUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs font-semibold text-black/60 underline decoration-black/30 underline-offset-4 hover:text-black"
+                          className="text-xs font-semibold text-white/60 underline decoration-black/30 underline-offset-4 hover:text-white"
                         >
                           Open source page
                         </a>
@@ -800,7 +798,7 @@ export default function OccupancyPage() {
                 </div>
               </div>
 
-              <div className="rounded-[18px] border border-black/10 bg-black/5 p-3">
+              <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
                 <div className="flex flex-wrap gap-2">
                   {[
                     { id: 'webcam' as const, label: 'Webcam', icon: Camera },
@@ -824,7 +822,7 @@ export default function OccupancyPage() {
                           );
                         }}
                         className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                          active ? 'border-red-600 bg-red-600 text-white' : 'border-black/10 bg-white text-black hover:bg-black/5'
+                          active ? 'border-red-600 bg-red-600 text-white' : 'border-white/10 bg-slate-950/80 text-white hover:bg-white/5'
                         }`}
                       >
                         <Icon size={15} />
@@ -833,7 +831,7 @@ export default function OccupancyPage() {
                     );
                   })}
                 </div>
-                <p className="mt-3 text-sm text-black/60">
+                <p className="mt-3 text-sm text-white/60">
                   {cameraMode === 'webcam'
                     ? 'Runs directly from the browser on this machine.'
                     : 'For RTSP, ONVIF, or vendor cloud cameras, point this field at a bridge that exposes a browser-readable JPEG snapshot endpoint.'}
@@ -843,23 +841,23 @@ export default function OccupancyPage() {
               {cameraMode !== 'webcam' ? (
                 <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                   <label className="grid gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Bridge URL</span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Bridge URL</span>
                     <input
                       value={sourceUrl}
                       onChange={e => setSourceUrl(e.target.value)}
                       placeholder="https://bridge.local/camera.jpg"
-                      className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                      className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 outline-none transition focus:border-red-600"
                     />
                   </label>
                   <div className="grid gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Connection</span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Connection</span>
                     <div
                       className={`rounded-[16px] border px-4 py-3 text-sm font-bold ${
                         connectionState === 'ready'
-                          ? 'border-green-600/20 bg-green-50 text-green-700'
+                          ? 'border-green-600/20 bg-green-500/10 text-green-700'
                           : connectionState === 'error'
-                            ? 'border-red-600/20 bg-red-50 text-red-700'
-                            : 'border-black/15 bg-black/5 text-black/70'
+                            ? 'border-red-600/20 bg-red-500/10 text-red-700'
+                            : 'border-white/15 bg-white/5 text-white/70'
                       }`}
                     >
                       {connectionState === 'ready' ? 'Connected' : connectionState === 'testing' ? 'Testing' : connectionState === 'error' ? 'Needs attention' : 'Idle'}
@@ -868,29 +866,29 @@ export default function OccupancyPage() {
                 </div>
               ) : null}
 
-              <div className="rounded-[18px] border border-black/10 bg-white p-3 text-sm text-black/70">
-                <span className="font-semibold text-black">Best fit for home cameras:</span> RTSP or ONVIF through a local bridge that serves a JPEG snapshot URL. The app connects to that URL, shows the live frame, and runs people detection on it.
+              <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-3 text-sm text-white/70">
+                <span className="font-semibold text-white">Best fit for home cameras:</span> RTSP or ONVIF through a local bridge that serves a JPEG snapshot URL. The app connects to that URL, shows the live frame, and runs people detection on it.
               </div>
 
               <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                 <label className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Alert threshold</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Alert threshold</span>
                   <input
                     type="range"
                     min={1}
                     max={20}
                     value={threshold}
                     onChange={e => setThreshold(Number(e.target.value))}
-                    className="h-2 w-full appearance-none rounded-full bg-black/10 accent-red-600"
+                    className="h-2 w-full appearance-none rounded-full bg-white/10 accent-red-600"
                   />
                 </label>
                 <div className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Limit</span>
-                  <div className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-sm font-bold">{threshold} people</div>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Limit</span>
+                  <div className="rounded-[16px] border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold">{threshold} people</div>
                 </div>
               </div>
 
-              <div className="relative overflow-hidden rounded-[22px] border border-black/10 bg-black">
+              <div className="relative overflow-hidden rounded-[22px] border border-white/10 bg-slate-950">
                 {cameraMode === 'webcam' ? (
                   <video ref={videoRef} playsInline muted className="aspect-video w-full object-cover" />
                 ) : (
@@ -903,7 +901,7 @@ export default function OccupancyPage() {
                 )}
                 <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
                 {!cameraOn ? (
-                  <div className="absolute inset-0 grid place-items-center bg-black/85 text-white">
+                  <div className="absolute inset-0 grid place-items-center bg-slate-950/85 text-white">
                     <div className="text-center">
                       <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/55">Camera idle</p>
                       <p className="mt-2 text-xl font-black">
@@ -915,46 +913,46 @@ export default function OccupancyPage() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <ActionButton onClick={startSource} disabled={cameraOn || loadingModel} className="bg-black text-white hover:bg-black/90">
+                <ActionButton onClick={startSource} disabled={cameraOn || loadingModel} className="bg-slate-950 text-white hover:bg-slate-950/90">
                   <Play size={16} /> {loadingModel ? 'Loading model' : cameraMode === 'webcam' ? 'Start webcam' : 'Start source'}
                 </ActionButton>
-                <ActionButton onClick={stopSource} disabled={!cameraOn} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <ActionButton onClick={stopSource} disabled={!cameraOn} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
                   <Square size={16} /> Stop source
                 </ActionButton>
                 <ActionButton onClick={saveSnapshot} className="border border-red-600/20 bg-red-600 text-white hover:bg-red-700">
                   <ShieldCheck size={16} /> Save snapshot
                 </ActionButton>
                 {cameraMode !== 'webcam' ? (
-                  <ActionButton onClick={testRemoteSource} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <ActionButton onClick={testRemoteSource} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
                     <CheckCircle2 size={16} /> Test connection
                   </ActionButton>
                 ) : null}
-                <ActionButton onClick={() => copyText('command', command)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <ActionButton onClick={() => copyText('command', command)} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
                   <ClipboardCopy size={16} /> {copyState.command ? 'Command copied' : 'Copy GenLayer command'}
                 </ActionButton>
-                <ActionButton onClick={() => copyText('packet', packet)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <ActionButton onClick={() => copyText('packet', packet)} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
                   <Download size={16} /> {copyState.packet ? 'Packet copied' : 'Copy packet'}
                 </ActionButton>
               </div>
 
-              <div className="rounded-[16px] border border-black/10 bg-black/5 p-4 text-sm text-black/70">
+              <div className="rounded-[16px] border border-white/10 bg-white/5 p-4 text-sm text-white/70">
                 {connectionNote}
               </div>
 
-              <div className="rounded-[18px] border border-black/10 bg-white p-4">
+              <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-4">
                 <div className="flex items-center gap-2">
                   <Link2 size={16} className="text-red-700" />
                   <h3 className="text-base font-black">Bridge guide</h3>
                 </div>
-                <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap rounded-[14px] bg-black/5 p-3 text-[12px] leading-6 text-black/75">{bridgeGuide}</pre>
+                <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap rounded-[14px] bg-white/5 p-3 text-[12px] leading-6 text-white/75">{bridgeGuide}</pre>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <ActionButton onClick={() => copyText('bridge-guide', bridgeGuide)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <ActionButton onClick={() => copyText('bridge-guide', bridgeGuide)} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
                     <ClipboardCopy size={16} /> {copyState['bridge-guide'] ? 'Guide copied' : 'Copy guide'}
                   </ActionButton>
                 </div>
               </div>
 
-              {error ? <p className="rounded-[16px] border border-red-600/20 bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
+              {error ? <p className="rounded-[16px] border border-red-600/20 bg-red-500/10 p-4 text-sm text-red-700">{error}</p> : null}
             </div>
           </Panel>
 
@@ -975,7 +973,7 @@ export default function OccupancyPage() {
                 <Metric label="Registry" value={occupancyDeployment.contract} hint={occupancyDeployment.address} />
                 <Metric label="Chain tx" value={occupancyDeployment.tx.slice(0, 12)} hint="Bootstrap record" />
               </div>
-              <p className="mt-4 rounded-[16px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
+              <p className="mt-4 rounded-[16px] border border-white/10 bg-white/5 p-4 text-sm text-white/75">
                 {count === 0
                   ? 'No people detected in the current frame.'
                   : `${count} person${count > 1 ? 's' : ''} currently visible. ${occupancy.label}.`}
@@ -988,16 +986,16 @@ export default function OccupancyPage() {
                 <h3 className="text-xl font-black">GenLayer packet</h3>
               </div>
               <div className="mt-4 space-y-3">
-                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Packet</p>
-                  <pre className="mt-3 max-h-[240px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{packet}</pre>
+                <div className="rounded-[18px] border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Packet</p>
+                  <pre className="mt-3 max-h-[240px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/80">{packet}</pre>
                 </div>
-                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">On-chain command</p>
-                  <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{command}</pre>
+                <div className="rounded-[18px] border border-white/10 bg-white/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">On-chain command</p>
+                  <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/80">{command}</pre>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <ActionButton onClick={exportPacket} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <ActionButton onClick={exportPacket} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
                     <Download size={16} /> Download packet
                   </ActionButton>
                   <ActionButton onClick={() => copyText('register', command)} className="bg-red-600 text-white hover:bg-red-700">
@@ -1015,20 +1013,20 @@ export default function OccupancyPage() {
               <div className="mt-4 space-y-2">
                 {history.length ? (
                   history.map(item => (
-                    <div key={item.id} className="rounded-[18px] border border-black/10 bg-white p-4">
+                    <div key={item.id} className="rounded-[18px] border border-white/10 bg-slate-950/80 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-bold">{item.title}</p>
-                          <p className="mt-1 text-xs text-black/55">{new Date(item.timestamp).toLocaleString()}</p>
+                          <p className="mt-1 text-xs text-white/55">{new Date(item.timestamp).toLocaleString()}</p>
                         </div>
-                        <div className={`rounded-full px-3 py-1 text-xs font-bold ${item.alertLevel === 'ALERT' ? 'bg-red-600 text-white' : 'bg-black/5 text-black'}`}>
+                        <div className={`rounded-full px-3 py-1 text-xs font-bold ${item.alertLevel === 'ALERT' ? 'bg-red-600 text-white' : 'bg-white/5 text-white'}`}>
                           {item.count} people
                         </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/65">
+                  <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-white/65">
                     No saved snapshots yet.
                   </div>
                 )}
@@ -1041,3 +1039,4 @@ export default function OccupancyPage() {
     </main>
   );
 }
+
