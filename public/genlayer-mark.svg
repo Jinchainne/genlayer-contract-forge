@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GenLayer mark">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <path fill="#000000" d="M54 470L214 34h22v185l-74 157 118 57-56 42z"/>
+  <path fill="#000000" d="M458 470L298 34h-22v185l74 157-118 57 56 42z"/>
+  <path fill="#000000" d="M256 210l56 108-56 32-56-32z"/>
+</svg>
