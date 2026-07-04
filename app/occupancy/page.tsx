@@ -298,6 +298,16 @@ export default function OccupancyPage() {
     window.setTimeout(() => setCopyState(prev => ({ ...prev, [key]: false })), 1200);
   }
 
+  async function pasteLiveCameraUrl() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+      setSourceUrl(text.trim());
+    } catch {
+      // Ignore clipboard permission failures and keep manual entry available.
+    }
+  }
+
   function makeStationProfile(id = selectedStationId || crypto.randomUUID()): StationProfile {
     return {
       id,
@@ -323,7 +333,7 @@ export default function OccupancyPage() {
     setConnectionNote(
       station.mode === 'webcam'
         ? 'Use the local webcam on this device.'
-        : 'Paste the HTTP snapshot or bridge URL from your camera gateway.',
+        : 'Paste the live camera bridge URL from your gateway.',
     );
   }
 
@@ -388,7 +398,7 @@ export default function OccupancyPage() {
   async function testRemoteSource() {
     if (!sourceUrl.trim()) {
       setConnectionState('error');
-      setConnectionNote('Paste a snapshot or bridge URL first.');
+      setConnectionNote('Paste a live camera URL first.');
       return;
     }
     setConnectionState('testing');
@@ -428,7 +438,7 @@ export default function OccupancyPage() {
         setStatus('Camera on');
       } else {
         if (!sourceUrl.trim()) {
-          throw new Error('Add a snapshot or bridge URL before starting.');
+          throw new Error('Add a live camera URL before starting.');
         }
         await loadRemoteFrame(sourceUrl.trim());
         setConnectionState('ready');
@@ -883,12 +893,30 @@ export default function OccupancyPage() {
               {cameraMode !== 'webcam' ? (
                 <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                   <label className="grid gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Live camera URL</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Live camera URL</span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={pasteLiveCameraUrl}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/70 transition hover:bg-white/10"
+                        >
+                          Paste
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSourceUrl('')}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/70 transition hover:bg-white/10"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
                     <input
                       value={sourceUrl}
                       onChange={e => setSourceUrl(e.target.value)}
                       placeholder="https://bridge.local/live-frame"
-                      className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 outline-none transition focus:border-red-600"
+                      className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 text-white caret-white outline-none transition placeholder:text-white/30 focus:border-red-600"
                     />
                   </label>
                   <div className="grid gap-2">

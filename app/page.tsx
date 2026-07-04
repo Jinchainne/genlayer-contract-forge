@@ -301,6 +301,22 @@ export default function Page() {
     }, 1200);
   }
 
+  async function pasteContractFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+      setSource(text);
+      sourceInputRef.current?.focus();
+    } catch {
+      // Ignore clipboard permission failures and leave manual paste available.
+    }
+  }
+
+  function clearContractSource() {
+    setSource('');
+    sourceInputRef.current?.focus();
+  }
+
   function runAnalysis() {
     setBusy(true);
     try {
@@ -545,13 +561,32 @@ export default function Page() {
               </div>
 
               <label className="grid gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Contract source</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Contract source</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={pasteContractFromClipboard}
+                      className="rounded-full border border-black/15 bg-black/5 px-3 py-1 text-[11px] font-semibold text-black/70 transition hover:bg-black/10"
+                    >
+                      Paste from clipboard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearContractSource}
+                      className="rounded-full border border-black/15 bg-black/5 px-3 py-1 text-[11px] font-semibold text-black/70 transition hover:bg-black/10"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <textarea
                   ref={sourceInputRef}
                   value={source}
                   onChange={e => setSource(e.target.value)}
                   onPaste={event => pasteIntoTextField(event, source, setSource)}
                   className="relative z-10 min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
+                  placeholder="# Paste a GenLayer contract here"
                   spellCheck={false}
                 />
               </label>
