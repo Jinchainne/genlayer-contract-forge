@@ -442,7 +442,7 @@ export default function Page() {
     });
   }
 
-  const scoreAccent = analysis.score >= 85 ? 'text-black' : analysis.score >= 65 ? 'text-black' : 'text-black';
+  const scoreAccent = analysis.score >= 85 ? 'text-cyan-300' : analysis.score >= 65 ? 'text-white' : 'text-red-300';
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#151b3a_0%,#0a0f1f_42%,#050810_100%)] pt-[238px] text-white lg:pt-[198px]">
@@ -486,6 +486,7 @@ export default function Page() {
           </div>
 
           <div className="grid items-start gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+          <div className="grid gap-4">
           <Panel>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -497,7 +498,7 @@ export default function Page() {
                   Paste a GenLayer contract and the tool will score it, extract the public surface, and build a deploy note.
                 </p>
               </div>
-              <div className="rounded-[18px] border border-black/10 bg-black px-4 py-3 text-white">
+              <div className="rounded-[18px] border border-black/10 bg-black px-4 py-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">Score</p>
                 <p className={`mt-1 text-4xl font-black ${scoreAccent}`}>{analysis.score}</p>
               </div>
@@ -616,6 +617,70 @@ export default function Page() {
               </div>
             </div>
           </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Bot size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Builder handoff</h3>
+            </div>
+            <p className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
+              {releaseChecklist.summary}
+            </p>
+            <div className="mt-4 grid gap-3">
+              {releaseChecklist.items.slice(0, 4).map(item => (
+                <div key={item} className="rounded-[18px] border border-black/10 bg-white p-3">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-600 text-xs font-black text-white">
+                      ✓
+                    </span>
+                    <p className="text-sm text-black/75">{item}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {clampTagList(analysis.blueprintTags).map(tag => (
+                <span key={tag} className="rounded-full border border-black/10 bg-black px-3 py-1.5 text-xs font-semibold text-white">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Sparkles size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Contract profile</h3>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Detected classes</p>
+                <p className="mt-2 text-sm text-black/80">{analysis.contractNames.length ? analysis.contractNames.join(', ') : 'none detected'}</p>
+              </div>
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Public views</p>
+                <p className="mt-2 text-sm text-black/80">{analysis.publicViews.length ? analysis.publicViews.join(', ') : 'none detected'}</p>
+              </div>
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Public writes</p>
+                <p className="mt-2 text-sm text-black/80">{analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'none detected'}</p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {analysis.nextSteps.length ? (
+                analysis.nextSteps.slice(0, 3).map(step => (
+                  <div key={step} className="rounded-[18px] border border-black/10 bg-white p-3 text-sm text-black/75">
+                    {step}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-3 text-sm text-black/65">
+                  No immediate changes required.
+                </div>
+              )}
+            </div>
+          </Panel>
+          </div>
 
           <div className="grid gap-4">
             <Panel>
@@ -751,39 +816,94 @@ export default function Page() {
                 )}
               </div>
             </Panel>
-          </div>
-        </div>
-
-        <section className="mt-4 grid items-start gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-          <Panel>
+            <Panel>
             <div className="flex items-center gap-2">
-              <Bot size={18} className="text-red-700" />
-              <h3 className="text-xl font-black">Builder handoff</h3>
+              <ShieldCheck size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Release checklist</h3>
             </div>
-            <p className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
-              {releaseChecklist.summary}
-            </p>
+            <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Deploy command</p>
+              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{releaseChecklist.command}</pre>
+            </div>
             <div className="mt-4 grid gap-3">
-              {releaseChecklist.items.slice(0, 4).map(item => (
-                <div key={item} className="rounded-[18px] border border-black/10 bg-white p-3">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-600 text-xs font-black text-white">
-                      ✓
-                    </span>
-                    <p className="text-sm text-black/75">{item}</p>
-                  </div>
+              {analysis.testPlan.map(step => (
+                <div key={step} className="rounded-[18px] border border-black/10 bg-white p-4 text-sm text-black/75">
+                  {step}
                 </div>
               ))}
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {clampTagList(analysis.blueprintTags).map(tag => (
-                <span key={tag} className="rounded-full border border-black/10 bg-black px-3 py-1.5 text-xs font-semibold text-white">
-                  {tag}
-                </span>
-              ))}
+            <div className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/70">
+              Use this tab as a GenLayer handoff surface: review the score, fix the findings, deploy to Studionet, then paste the submission pack into the hackathon form.
             </div>
           </Panel>
 
+          <Panel>
+              <div className="flex items-center gap-2">
+                <Code2 size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Deploy kit</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Metric label="Network" value={String(forgeDeployment.network || 'studionet')} />
+                <Metric label="Contract" value={String(forgeDeployment.contract || 'ContractForgeRegistry')} />
+                <Metric label="Address" value={String(forgeDeployment.address || 'pending')} hint="Studionet deployment" />
+                <Metric label="Tx hash" value={String(forgeDeployment.tx || 'pending')} hint="Deployment transaction" />
+              </div>
+              <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Command</p>
+                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{`genlayer network studionet
+genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}</pre>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton
+                  onClick={() => copyText('command', `genlayer network studionet\ngenlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`)}
+                  className="border border-black/15 bg-white text-black hover:bg-black/5"
+                >
+                  <ClipboardCopy size={16} /> {copyStatus.command === 'copied' ? 'Command copied' : 'Copy deploy command'}
+                </ActionButton>
+                <ActionButton onClick={() => copyText('address', `${forgeDeployment.address || 'pending'}\n${forgeDeployment.tx || 'pending'}`)} className="bg-red-600 text-white hover:bg-red-700">
+                  <ArrowUpRight size={16} /> Copy chain refs
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-report.md`, brief.report)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download report
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-deploy-pack.md`, deployPack)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download deploy pack
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-submission-pack.md`, submissionPack)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download submission pack
+                </ActionButton>
+                <ActionButton onClick={exportAll} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Export bundle
+                </ActionButton>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <MoveRight size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Judge-ready notes</h3>
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Submission pack</p>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{submissionPack}</pre>
+                </div>
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Deploy pack</p>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{deployPack}</pre>
+                </div>
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Forge brief</p>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{brief.report}</pre>
+                </div>
+              </div>
+            </Panel>
+          </div>
+        </div>
+
+        {/* Removed duplicated lower rows in favor of continuous left/right stacks above. */}
+        {false && (
+          <section>
           <Panel>
             <div className="flex items-center gap-2">
               <ShieldCheck size={18} className="text-red-700" />
@@ -805,7 +925,9 @@ export default function Page() {
             </div>
           </Panel>
         </section>
+        )}
 
+        {false && (
         <div className="mt-4 grid items-start gap-4 xl:grid-cols-[0.92fr_1.08fr]">
           <div className="grid gap-4">
             <Panel>
@@ -904,6 +1026,7 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
             </div>
           </Panel>
         </div>
+        )}
 
           <footer className="pb-5 pt-4 text-center text-xs text-white/45">
             Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.
