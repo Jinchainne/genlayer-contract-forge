@@ -32,15 +32,15 @@ export default function TopNav() {
   const pathname = usePathname();
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    <header className="pointer-events-none fixed inset-x-0 top-0 z-50">
       <div className="mx-auto max-w-[1800px] px-4 pt-3 lg:px-6">
-        <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(6,8,18,0.96),rgba(5,7,14,0.98))] shadow-[0_26px_72px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+        <div className="pointer-events-auto relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(6,8,18,0.96),rgba(5,7,14,0.98))] shadow-[0_26px_72px_rgba(0,0,0,0.55)] backdrop-blur-xl">
           <div
-            className="absolute inset-0 bg-[url('/genlayer-banner.png')] bg-cover bg-[center_35%] opacity-15 mix-blend-screen"
+            className="pointer-events-none absolute inset-0 bg-[url('/genlayer-banner.png')] bg-cover bg-[center_35%] opacity-15 mix-blend-screen"
             aria-hidden="true"
           />
           <div
-            className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.18),transparent_22%),radial-gradient(circle_at_85%_0%,rgba(217,70,239,0.18),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_34%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.18),transparent_22%),radial-gradient(circle_at_85%_0%,rgba(217,70,239,0.18),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_34%)]"
             aria-hidden="true"
           />
 

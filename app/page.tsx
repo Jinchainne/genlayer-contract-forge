@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react';
 import {
   ArrowRightLeft,
   ArrowUpRight,
@@ -192,7 +192,7 @@ type DraftProject = {
 };
 
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
+  return <section className={`relative isolate rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
 }
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -234,6 +234,8 @@ function presetById(id: string) {
 
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const sourceInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [title, setTitle] = useState('ProvenanceRegistry');
   const [source, setSource] = useState(primarySample);
   const [compareSource, setCompareSource] = useState(compareSample);
@@ -403,6 +405,28 @@ export default function Page() {
     event.target.value = '';
   }
 
+  function pasteIntoTextField(
+    event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    currentValue: string,
+    setValue: (value: string) => void,
+  ) {
+    const pasted = event.clipboardData.getData('text');
+    if (!pasted) return;
+
+    event.preventDefault();
+
+    const field = event.currentTarget;
+    const selectionStart = field.selectionStart ?? currentValue.length;
+    const selectionEnd = field.selectionEnd ?? currentValue.length;
+    const nextValue = `${currentValue.slice(0, selectionStart)}${pasted}${currentValue.slice(selectionEnd)}`;
+    setValue(nextValue);
+
+    requestAnimationFrame(() => {
+      const cursor = selectionStart + pasted.length;
+      field.setSelectionRange(cursor, cursor);
+    });
+  }
+
   const scoreAccent = analysis.score >= 85 ? 'text-black' : analysis.score >= 65 ? 'text-black' : 'text-black';
 
   return (
@@ -411,7 +435,7 @@ export default function Page() {
       <div className="mx-auto max-w-[1800px] px-4 pb-4 lg:px-6">
         <div className="min-w-0">
           <header className="relative mb-4 overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,20,39,0.96),rgba(8,10,18,0.98))] px-5 py-5 shadow-[0_26px_64px_rgba(0,0,0,0.42)]">
-            <div className="absolute inset-0 forge-grid opacity-[0.12]" />
+            <div className="pointer-events-none absolute inset-0 forge-grid opacity-[0.12]" />
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[18px] border border-white/10 bg-white p-2 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
@@ -469,10 +493,14 @@ export default function Page() {
                 <label className="grid gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Project name</span>
                   <input
+                    ref={titleInputRef}
                     value={title}
                     onChange={e => setTitle(e.target.value)}
-                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                    onPaste={event => pasteIntoTextField(event, title, setTitle)}
+                    className="relative z-10 rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
                     placeholder="ProvenanceRegistry"
+                    autoComplete="off"
+                    spellCheck={false}
                   />
                 </label>
                 <label className="grid gap-2">
@@ -519,9 +547,11 @@ export default function Page() {
               <label className="grid gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Contract source</span>
                 <textarea
+                  ref={sourceInputRef}
                   value={source}
                   onChange={e => setSource(e.target.value)}
-                  className="min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 outline-none transition focus:border-red-600"
+                  onPaste={event => pasteIntoTextField(event, source, setSource)}
+                  className="relative z-10 min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 outline-none transition focus:border-red-600"
                   spellCheck={false}
                 />
               </label>
