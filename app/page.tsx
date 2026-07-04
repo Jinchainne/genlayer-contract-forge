@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type C
 import {
   ArrowRightLeft,
   ArrowUpRight,
-  BadgeCheck,
   Bot,
   ClipboardCopy,
   Code2,
@@ -759,14 +758,14 @@ export default function Page() {
           <Panel>
             <div className="flex items-center gap-2">
               <Bot size={18} className="text-red-700" />
-              <h3 className="text-xl font-black">Recommended use case</h3>
+              <h3 className="text-xl font-black">Builder handoff</h3>
             </div>
             <p className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
               {releaseChecklist.summary}
             </p>
-            <div className="mt-4 space-y-3">
-              {releaseChecklist.items.map(item => (
-                <div key={item} className="rounded-[18px] border border-black/10 bg-white p-4">
+            <div className="mt-4 grid gap-3">
+              {releaseChecklist.items.slice(0, 4).map(item => (
+                <div key={item} className="rounded-[18px] border border-black/10 bg-white p-3">
                   <div className="flex items-start gap-3">
                     <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-600 text-xs font-black text-white">
                       ✓
@@ -774,6 +773,13 @@ export default function Page() {
                     <p className="text-sm text-black/75">{item}</p>
                   </div>
                 </div>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {clampTagList(analysis.blueprintTags).map(tag => (
+                <span key={tag} className="rounded-full border border-black/10 bg-black px-3 py-1.5 text-xs font-semibold text-white">
+                  {tag}
+                </span>
               ))}
             </div>
           </Panel>
@@ -801,41 +807,6 @@ export default function Page() {
         </section>
 
         <div className="mt-4 grid items-start gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-          <Panel>
-            <div className="flex items-center gap-2">
-              <Bot size={18} className="text-red-700" />
-              <h3 className="text-xl font-black">Practical modules</h3>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {[
-                {
-                  title: 'Provenance registry',
-                  detail: 'Log a source-backed event, preserve the latest result, and expose a stable read path for review.',
-                },
-                {
-                  title: 'Policy router',
-                  detail: 'Attach policies to targets and keep the mapping visible through a public view.',
-                },
-                {
-                  title: 'Automation guard',
-                  detail: 'Wrap LLM reasoning in the consensus path and keep writes deterministic.',
-                },
-                {
-                  title: 'Submission pack',
-                  detail: 'Turn a contract into a judge-friendly summary with notes, tags, and next steps.',
-                },
-              ].map(item => (
-                <div key={item.title} className="rounded-[18px] border border-black/10 bg-white p-4">
-                  <div className="flex items-center gap-2">
-                    <BadgeCheck size={16} className="text-red-700" />
-                    <p className="font-bold">{item.title}</p>
-                  </div>
-                  <p className="mt-2 text-sm text-black/70">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
           <div className="grid gap-4">
             <Panel>
               <div className="flex items-center gap-2">
@@ -883,31 +854,28 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 <MoveRight size={18} className="text-red-700" />
                 <h3 className="text-xl font-black">Judge-ready notes</h3>
               </div>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
                 <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Submission pack</p>
-                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{submissionPack}</pre>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{submissionPack}</pre>
                 </div>
                 <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Deploy pack</p>
-                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{deployPack}</pre>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{deployPack}</pre>
                 </div>
                 <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Forge brief</p>
-                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{brief.report}</pre>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{brief.report}</pre>
                 </div>
               </div>
             </Panel>
           </div>
-        </div>
-
-        <section className="mt-4 grid items-start gap-4 xl:grid-cols-3">
           <Panel>
             <div className="flex items-center gap-2">
               <Sparkles size={18} className="text-red-700" />
               <h3 className="text-xl font-black">Contract profile</h3>
             </div>
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Detected classes</p>
                 <p className="mt-2 text-sm text-black/80">{analysis.contractNames.length ? analysis.contractNames.join(', ') : 'none detected'}</p>
@@ -921,33 +889,9 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 <p className="mt-2 text-sm text-black/80">{analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'none detected'}</p>
               </div>
             </div>
-          </Panel>
-
-          <Panel>
-            <div className="flex items-center gap-2">
-              <Bot size={18} className="text-red-700" />
-              <h3 className="text-xl font-black">Blueprint tags</h3>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {clampTagList(analysis.blueprintTags).map(tag => (
-                <span key={tag} className="rounded-full border border-black/10 bg-black px-3 py-1.5 text-xs font-semibold text-white">
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <p className="mt-4 text-sm text-black/65">
-              The analyzer is tuned for GenLayer builders: it checks deterministic structure, public surface quality, tests, deployment readiness, and security signals.
-            </p>
-          </Panel>
-
-          <Panel>
-            <div className="flex items-center gap-2">
-              <MoveRight size={18} className="text-red-700" />
-              <h3 className="text-xl font-black">Next steps</h3>
-            </div>
             <div className="mt-4 space-y-2">
               {analysis.nextSteps.length ? (
-                analysis.nextSteps.map(step => (
+                analysis.nextSteps.slice(0, 3).map(step => (
                   <div key={step} className="rounded-[18px] border border-black/10 bg-white p-3 text-sm text-black/75">
                     {step}
                   </div>
@@ -959,7 +903,7 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
               )}
             </div>
           </Panel>
-        </section>
+        </div>
 
           <footer className="pb-5 pt-4 text-center text-xs text-white/45">
             Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.

@@ -44,7 +44,7 @@ export default function TopNav() {
             aria-hidden="true"
           />
 
-          <div className="relative grid gap-3 px-4 py-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-5 lg:px-5">
+          <div className="relative grid gap-3 px-4 py-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-center md:gap-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-5 lg:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[18px] border border-white/10 bg-white/95 p-2 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
                 <img src="/genlayer-mark.svg" alt="GenLayer logo" className="h-full w-full object-contain" />
@@ -56,8 +56,8 @@ export default function TopNav() {
               </div>
             </div>
 
-            <div className="overflow-x-auto pb-1">
-              <div className="inline-flex min-w-full flex-wrap gap-2 lg:justify-center">
+            <div className="overflow-x-auto pb-1 md:col-span-2 lg:col-span-1">
+              <div className="inline-flex min-w-full flex-nowrap gap-2 md:flex-wrap lg:justify-center">
                 {items.map(item => {
                   const Icon = item.icon;
                   const active = pathname === item.href;
@@ -85,7 +85,7 @@ export default function TopNav() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:auto-cols-fr lg:grid-flow-col">
+            <div className="grid grid-cols-3 gap-2 md:col-span-2 sm:grid-cols-6 lg:auto-cols-fr lg:grid-flow-col">
               {community.map(item => {
                 const Icon = item.icon;
                 return (
