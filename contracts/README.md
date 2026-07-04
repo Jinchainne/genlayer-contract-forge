@@ -35,3 +35,14 @@ npm run verify:contract
 ## Write Method
 
 - `register_analysis`
+
+## Occupancy Registry
+
+- File: `contracts/occupancy_registry.py`
+- Contract name: `OccupancyRegistry`
+- Purpose: store live camera occupancy snapshots and expose the latest count, alert level, and timestamp
+- Network: `studionet`
+- Address: `0xf5b52dc0cB82B410448EA0D9cCB5041d82c71621`
+- Deployment tx: `0xfeca3c0dfd4f8f6093086251e90da0cb6863df948c646e3d3999f1ef51b5038d`
+
+The registry has already been bootstrapped with a sample snapshot record.

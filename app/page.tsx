@@ -408,8 +408,8 @@ export default function Page() {
         <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="grid h-14 w-14 place-items-center rounded-2xl border border-black/10 bg-black">
-                <img src="/genlayer-mark.svg" alt="GenLayer mark" className="h-10 w-10" />
+              <div className="flex items-center justify-center overflow-hidden rounded-[18px] border border-black/10 bg-white px-3 py-2">
+                <img src="/genlayer-mark.svg" alt="GenLayer Studio logo" className="h-12 w-auto max-w-[240px] object-contain" />
               </div>
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-black/50">GenLayer Studio</p>
@@ -435,6 +435,10 @@ export default function Page() {
             </div>
           </div>
         </header>
+
+        <div className="mb-4 rounded-[20px] border border-red-600/20 bg-red-50 px-5 py-4 text-sm text-red-900">
+          Real-time camera monitoring is now available in <a href="/occupancy" className="font-bold underline">Occupancy AI Desk</a>. It counts people live, draws boxes, and prepares a GenLayer snapshot packet.
+        </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
           <Panel>

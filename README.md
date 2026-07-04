@@ -17,6 +17,7 @@ The app is intentionally focused on GenLayer only. It is not a trading dashboard
 - Imports `.py`, `.txt`, or `.md` source files directly into the workspace.
 - Exports the whole workspace as markdown or JSON for sharing with teammates and reviewers.
 - Keeps the deployed Studionet registry details visible in the UI.
+- Includes a live occupancy desk that counts people from a webcam feed and prepares an on-chain snapshot packet.
 
 ## Why It Exists
 
@@ -79,6 +80,13 @@ This tool is meant to help builders move from a rough idea to a reviewable GenLa
 - Download the deploy pack and submission pack separately
 - Export the whole workspace as a JSON bundle
 
+### Occupancy AI Desk
+
+- Counts people from a live webcam feed
+- Draws bounding boxes around detected people
+- Keeps a snapshot history in local storage
+- Builds a GenLayer command for writing occupancy state to the registry
+
 ## On-Chain Registry
 
 The Forge workspace includes a deployed GenLayer registry contract on Studionet:
@@ -129,6 +137,7 @@ scripts/        verification helpers
 - multi-version comparison
 - file import/export support
 - local draft persistence
+- live camera occupancy monitoring
 
 ## Intended Audience
 

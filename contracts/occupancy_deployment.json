@@ -1,0 +1,8 @@
+{
+  "network": "studionet",
+  "contract": "OccupancyRegistry",
+  "address": "0xf5b52dc0cB82B410448EA0D9cCB5041d82c71621",
+  "tx": "0xfeca3c0dfd4f8f6093086251e90da0cb6863df948c646e3d3999f1ef51b5038d",
+  "rpc": "https://studio.genlayer.com/api",
+  "project": "GenLayer Occupancy Desk"
+}

@@ -1,6 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GenLayer mark">
-  <rect width="512" height="512" fill="#ffffff"/>
-  <path fill="#000000" d="M54 470L214 34h22v185l-74 157 118 57-56 42z"/>
-  <path fill="#000000" d="M458 470L298 34h-22v185l74 157-118 57 56 42z"/>
-  <path fill="#000000" d="M256 210l56 108-56 32-56-32z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 240" role="img" aria-label="GenLayer Studio">
+  <rect width="840" height="240" fill="#ffffff"/>
+  <g transform="translate(18 18)">
+    <rect x="0" y="0" width="204" height="204" rx="44" fill="#ffffff"/>
+    <path fill="#000000" d="M24 190L102 16h10v76l-38 82 54 24-24 18z"/>
+    <path fill="#000000" d="M180 190L102 16h-10v76l38 82-54 24 24 18z"/>
+    <path fill="#000000" d="M102 92l28 56-28 16-28-16z"/>
+  </g>
+  <g fill="#000000" font-family="Arial, Helvetica, sans-serif">
+    <text x="260" y="110" font-size="74" font-weight="700" letter-spacing="-1.5">GenLayer</text>
+    <text x="260" y="170" font-size="34" font-weight="400" letter-spacing="7">STUDIO</text>
+  </g>
 </svg>
