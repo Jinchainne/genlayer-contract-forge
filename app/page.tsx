@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ChangeEvent, type ReactNode } from 'react';
 import {
   ArrowRightLeft,
   ArrowUpRight,
@@ -10,6 +10,7 @@ import {
   Code2,
   Copy,
   Download,
+  FileInput,
   FlaskConical,
   GitCompare,
   Layers3,
@@ -29,6 +30,8 @@ import {
   type AnalysisResult,
   type DiffResult,
 } from '../src/lib/analyzer';
+
+const STORAGE_KEY = 'genlayer-contract-forge:v2';
 
 const primarySample = `# { "Depends": "py-genlayer:test" }
 from genlayer import *
@@ -78,24 +81,119 @@ class ProvenanceRegistry(gl.Contract):
     def latest(self) -> str:
         return self._latest`;
 
+const presets = [
+  {
+    id: 'provenance',
+    label: 'Provenance registry',
+    title: 'ProvenanceRegistry',
+    description: 'Track a source-backed event and keep the latest consensus result readable.',
+    source: primarySample,
+    compareSource: compareSample,
+  },
+  {
+    id: 'policy-router',
+    label: 'Policy router',
+    title: 'PolicyRouter',
+    description: 'Attach a policy to a target and expose a read path for audits.',
+    source: `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class PolicyRouter(gl.Contract):
+    def __init__(self):
+        self._routes = {}
+
+    @gl.public.write
+    def attach_policy(self, policy_id: str, target: str) -> str:
+        def evaluate():
+            return f"attached:{policy_id}:{target}"
+
+        result = gl.eq_principle_strict_eq(evaluate)
+        self._routes[policy_id] = target
+        return result
+
+    @gl.public.view
+    def resolve(self, policy_id: str) -> str:
+        return self._routes.get(policy_id, "")`,
+    compareSource: compareSample,
+  },
+  {
+    id: 'signal-ledger',
+    label: 'Signal ledger',
+    title: 'SignalLedger',
+    description: 'Store reviewed signal summaries with a visible audit trail.',
+    source: `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class SignalLedger(gl.Contract):
+    def __init__(self):
+        self._signals = []
+
+    @gl.public.write
+    def record_signal(self, signal: str, score: str) -> str:
+        def evaluate():
+            return f"{signal}:{score}"
+
+        result = gl.eq_principle_strict_eq(evaluate)
+        self._signals.append(result)
+        return result
+
+    @gl.public.view
+    def latest(self) -> str:
+        return self._signals[-1] if self._signals else ""`,
+    compareSource: compareSample,
+  },
+  {
+    id: 'dispute-resolver',
+    label: 'Dispute resolver',
+    title: 'DisputeResolver',
+    description: 'Package an evidence check and leave the result visible for review.',
+    source: `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class DisputeResolver(gl.Contract):
+    def __init__(self):
+        self._decision = ""
+
+    @gl.public.write
+    def resolve(self, claim: str, evidence_url: str) -> str:
+        def evaluate():
+            prompt = f"""
+            Review the claim and evidence.
+            claim={claim}
+            evidence_url={evidence_url}
+            Return approved=yes|no;reason=short reason
+            """
+            return gl.exec_prompt(prompt).strip()
+
+        result = gl.eq_principle_strict_eq(evaluate)
+        self._decision = result
+        return result
+
+    @gl.public.view
+    def decision(self) -> str:
+        return self._decision`,
+    compareSource: compareSample,
+  },
+] as const;
+
 const fallbackAnalysis = analyzeGenLayerContract(primarySample, 'ProvenanceRegistry');
 const fallbackDiff = compareGenLayerContracts(primarySample, compareSample, 'ProvenanceRegistry', 'LegacyRegistry');
 
 type CopyStatus = 'idle' | 'copied';
 
+type DraftProject = {
+  id: string;
+  title: string;
+  source: string;
+  compareSource: string;
+  updatedAt: string;
+};
+
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
 }
 
-function Metric({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
+function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-[18px] border border-black/10 bg-white p-4">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">{label}</p>
@@ -124,7 +222,16 @@ function clampTagList(tags: string[]) {
   return tags.length ? tags : ['none'];
 }
 
+function makeId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function presetById(id: string) {
+  return presets.find(preset => preset.id === id) || presets[0];
+}
+
 export default function Page() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [title, setTitle] = useState('ProvenanceRegistry');
   const [source, setSource] = useState(primarySample);
   const [compareSource, setCompareSource] = useState(compareSample);
@@ -132,18 +239,54 @@ export default function Page() {
   const [diff, setDiff] = useState<DiffResult>(() => fallbackDiff);
   const [busy, setBusy] = useState(false);
   const [copyStatus, setCopyStatus] = useState<Record<string, CopyStatus>>({});
+  const [drafts, setDrafts] = useState<DraftProject[]>([]);
+  const [activeDraftId, setActiveDraftId] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState<string>(presets[0].id);
+  const [lastSaved, setLastSaved] = useState('');
 
-  const deployPack = useMemo(
-    () => createDeployPack(analysis, title, forgeDeployment.address, forgeDeployment.tx),
-    [analysis, title],
-  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { drafts?: DraftProject[]; activeDraftId?: string; selectedPreset?: string };
+      if (Array.isArray(parsed.drafts)) setDrafts(parsed.drafts);
+      if (parsed.activeDraftId) setActiveDraftId(parsed.activeDraftId);
+      if (parsed.selectedPreset) {
+        setSelectedPreset(parsed.selectedPreset);
+      }
+      const latest = parsed.drafts?.find(item => item.id === parsed.activeDraftId) || parsed.drafts?.[0];
+      if (latest) {
+        setTitle(latest.title);
+        setSource(latest.source);
+        setCompareSource(latest.compareSource);
+        setAnalysis(analyzeGenLayerContract(latest.source, latest.title));
+        setDiff(compareGenLayerContracts(latest.source, latest.compareSource, latest.title, 'Comparison'));
+        setLastSaved(latest.updatedAt);
+      }
+    } catch {
+      // ignore broken local state
+    }
+  }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        drafts,
+        activeDraftId,
+        selectedPreset,
+      }),
+    );
+  }, [drafts, activeDraftId, selectedPreset]);
+
+  const deployPack = useMemo(() => createDeployPack(analysis, title, forgeDeployment.address, forgeDeployment.tx), [analysis, title]);
   const submissionPack = useMemo(() => createSubmissionPack(analysis, title), [analysis, title]);
-
   const brief = useMemo(() => generateForgeBrief(source, title), [source, title]);
-
   const methodCount = analysis.publicViews.length + analysis.publicWrites.length;
   const findingCount = analysis.findings.length;
+  const currentPreset = presetById(selectedPreset);
 
   async function copyText(key: string, text: string) {
     await navigator.clipboard.writeText(text);
@@ -151,44 +294,6 @@ export default function Page() {
     window.setTimeout(() => {
       setCopyStatus(prev => ({ ...prev, [key]: 'idle' }));
     }, 1200);
-  }
-
-  function loadPrimarySample() {
-    setTitle('ProvenanceRegistry');
-    setSource(primarySample);
-    setCompareSource(compareSample);
-    const next = analyzeGenLayerContract(primarySample, 'ProvenanceRegistry');
-    setAnalysis(next);
-    setDiff(compareGenLayerContracts(primarySample, compareSample, 'ProvenanceRegistry', 'LegacyRegistry'));
-  }
-
-  function loadAutomationSample() {
-    const automation = `# { "Depends": "py-genlayer:test" }
-from genlayer import *
-
-class PolicyRouter(gl.Contract):
-    def __init__(self):
-        self._routes = {}
-
-    @gl.public.write
-    def attach_policy(self, policy_id: str, target: str) -> str:
-        def evaluate():
-            return f"attached:{policy_id}:{target}"
-
-        result = gl.eq_principle_strict_eq(evaluate)
-        self._routes[policy_id] = target
-        return result
-
-    @gl.public.view
-    def route(self, policy_id: str) -> str:
-        return self._routes.get(policy_id, "")`;
-
-    setTitle('PolicyRouter');
-    setSource(automation);
-    setCompareSource(compareSample);
-    const next = analyzeGenLayerContract(automation, 'PolicyRouter');
-    setAnalysis(next);
-    setDiff(compareGenLayerContracts(automation, compareSample, 'PolicyRouter', 'LegacyRegistry'));
   }
 
   function runAnalysis() {
@@ -203,12 +308,99 @@ class PolicyRouter(gl.Contract):
   }
 
   function runCompare() {
-    const next = compareGenLayerContracts(source, compareSource, title, 'Comparison');
-    setDiff(next);
+    setDiff(compareGenLayerContracts(source, compareSource, title, 'Comparison'));
   }
 
-  const scoreAccent =
-    analysis.score >= 85 ? 'text-black' : analysis.score >= 65 ? 'text-black' : 'text-black';
+  function loadPrimarySample() {
+    setTitle('ProvenanceRegistry');
+    setSource(primarySample);
+    setCompareSource(compareSample);
+    setSelectedPreset('provenance');
+    setAnalysis(analyzeGenLayerContract(primarySample, 'ProvenanceRegistry'));
+    setDiff(compareGenLayerContracts(primarySample, compareSample, 'ProvenanceRegistry', 'LegacyRegistry'));
+  }
+
+  function loadPreset(presetId: string) {
+    const preset = presetById(presetId);
+    setSelectedPreset(preset.id);
+    setTitle(preset.title);
+    setSource(preset.source);
+    setCompareSource(preset.compareSource);
+    setAnalysis(analyzeGenLayerContract(preset.source, preset.title));
+    setDiff(compareGenLayerContracts(preset.source, preset.compareSource, preset.title, 'LegacyRegistry'));
+  }
+
+  function saveDraft() {
+    const updatedAt = new Date().toISOString();
+    const draft: DraftProject = {
+      id: activeDraftId || makeId(),
+      title,
+      source,
+      compareSource,
+      updatedAt,
+    };
+    setActiveDraftId(draft.id);
+    setLastSaved(updatedAt);
+    setDrafts(prev => [draft, ...prev.filter(item => item.id !== draft.id)].slice(0, 8));
+    setCopyStatus(prev => ({ ...prev, save: 'copied' }));
+  }
+
+  function loadDraft(draft: DraftProject) {
+    setActiveDraftId(draft.id);
+    setTitle(draft.title);
+    setSource(draft.source);
+    setCompareSource(draft.compareSource);
+    setAnalysis(analyzeGenLayerContract(draft.source, draft.title));
+    setDiff(compareGenLayerContracts(draft.source, draft.compareSource, draft.title, 'Comparison'));
+    setLastSaved(draft.updatedAt);
+  }
+
+  function removeDraft(draftId: string) {
+    setDrafts(prev => prev.filter(item => item.id !== draftId));
+    if (activeDraftId === draftId) setActiveDraftId('');
+  }
+
+  function downloadText(filename: string, content: string, mime = 'text/markdown') {
+    const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportAll() {
+    const payload = {
+      title,
+      analysis,
+      diff,
+      deployPack,
+      submissionPack,
+      report: brief.report,
+      source,
+      compareSource,
+      generatedAt: new Date().toISOString(),
+    };
+    downloadText(`${title || 'genlayer-forge'}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  }
+
+  function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      setTitle(file.name.replace(/\.[^.]+$/, '') || 'ImportedContract');
+      setSource(text);
+      setAnalysis(analyzeGenLayerContract(text, file.name));
+      setDiff(compareGenLayerContracts(text, compareSource, file.name, 'Comparison'));
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }
+
+  const scoreAccent = analysis.score >= 85 ? 'text-black' : analysis.score >= 65 ? 'text-black' : 'text-black';
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
@@ -274,13 +466,36 @@ class PolicyRouter(gl.Contract):
                   />
                 </label>
                 <label className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Comparison label</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Preset note</span>
                   <input
-                    value="Legacy comparison"
+                    value={currentPreset.description}
                     readOnly
                     className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-black/60 outline-none"
                   />
                 </label>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                <label className="grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Preset</span>
+                  <select
+                    value={selectedPreset}
+                    onChange={e => loadPreset(e.target.value)}
+                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                  >
+                    {presets.map(preset => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Updated</span>
+                  <div className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-sm text-black/65">
+                    {lastSaved ? new Date(lastSaved).toLocaleString() : 'Not saved yet'}
+                  </div>
+                </div>
               </div>
 
               <label className="grid gap-2">
@@ -304,8 +519,11 @@ class PolicyRouter(gl.Contract):
                 <ActionButton onClick={loadPrimarySample} className="border border-black/15 bg-white text-black hover:bg-black/5">
                   <ClipboardCopy size={16} /> Load sample
                 </ActionButton>
-                <ActionButton onClick={loadAutomationSample} className="border border-black/15 bg-white text-black hover:bg-black/5">
-                  <Bot size={16} /> Load automation sample
+                <ActionButton onClick={() => fileInputRef.current?.click()} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <FileInput size={16} /> Import file
+                </ActionButton>
+                <ActionButton onClick={saveDraft} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <ShieldCheck size={16} /> {copyStatus.save === 'copied' ? 'Draft saved' : 'Save draft'}
                 </ActionButton>
                 <ActionButton onClick={() => copyText('deploy', deployPack)} className="border border-red-600/20 bg-red-600 text-white hover:bg-red-700">
                   <Copy size={16} /> {copyStatus.deploy === 'copied' ? 'Deploy pack copied' : 'Copy deploy pack'}
@@ -332,6 +550,19 @@ class PolicyRouter(gl.Contract):
               <p className="mt-4 rounded-[16px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
                 {analysis.summary}
               </p>
+              <div className="mt-4 grid gap-3">
+                {Object.entries(analysis.breakdown).map(([key, value]) => (
+                  <div key={key} className="rounded-[16px] border border-black/10 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">{key}</p>
+                      <p className="text-sm font-bold text-black">{value}/100</p>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-black/10">
+                      <div className="h-2 rounded-full bg-red-600" style={{ width: `${Math.max(4, value)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </Panel>
 
             <Panel>
@@ -381,7 +612,7 @@ class PolicyRouter(gl.Contract):
               </div>
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Current source</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Comparison source</p>
                   <textarea
                     value={compareSource}
                     onChange={e => setCompareSource(e.target.value)}
@@ -402,13 +633,49 @@ class PolicyRouter(gl.Contract):
                 </ActionButton>
               </div>
             </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <Layers3 size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Draft vault</h3>
+              </div>
+              <div className="mt-4 space-y-3">
+                {drafts.length ? (
+                  drafts.map(draft => (
+                    <div
+                      key={draft.id}
+                      className={`rounded-[18px] border px-4 py-3 ${
+                        draft.id === activeDraftId ? 'border-red-600 bg-red-50' : 'border-black/10 bg-black/5'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button onClick={() => loadDraft(draft)} className="text-left">
+                          <p className="font-bold">{draft.title}</p>
+                          <p className="mt-1 text-xs text-black/55">{new Date(draft.updatedAt).toLocaleString()}</p>
+                        </button>
+                        <button
+                          onClick={() => removeDraft(draft.id)}
+                          className="rounded-full border border-black/10 px-3 py-1 text-xs font-semibold text-black/60 hover:bg-white"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/65">
+                    No saved drafts yet. Save one to keep working across sessions.
+                  </div>
+                )}
+              </div>
+            </Panel>
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
           <Panel>
             <div className="flex items-center gap-2">
-              <Layers3 size={18} className="text-red-700" />
+              <Bot size={18} className="text-red-700" />
               <h3 className="text-xl font-black">Practical modules</h3>
             </div>
             <div className="mt-4 grid gap-3">
@@ -455,10 +722,8 @@ class PolicyRouter(gl.Contract):
               </div>
               <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Command</p>
-                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">
-{`genlayer network studionet
-genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}
-                </pre>
+                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{`genlayer network studionet
+genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}</pre>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
                 <ActionButton
@@ -467,11 +732,20 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 >
                   <ClipboardCopy size={16} /> {copyStatus.command === 'copied' ? 'Command copied' : 'Copy deploy command'}
                 </ActionButton>
-                <ActionButton
-                  onClick={() => copyText('address', `${forgeDeployment.address || 'pending'}\n${forgeDeployment.tx || 'pending'}`)}
-                  className="bg-red-600 text-white hover:bg-red-700"
-                >
+                <ActionButton onClick={() => copyText('address', `${forgeDeployment.address || 'pending'}\n${forgeDeployment.tx || 'pending'}`)} className="bg-red-600 text-white hover:bg-red-700">
                   <ArrowUpRight size={16} /> Copy chain refs
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-report.md`, brief.report)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download report
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-deploy-pack.md`, deployPack)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download deploy pack
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-submission-pack.md`, submissionPack)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download submission pack
+                </ActionButton>
+                <ActionButton onClick={exportAll} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Export bundle
                 </ActionButton>
               </div>
             </Panel>
@@ -563,6 +837,7 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
           Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.
         </footer>
       </div>
+      <input ref={fileInputRef} type="file" accept=".py,.txt,.md" className="hidden" onChange={handleImport} />
     </main>
   );
 }

@@ -2,7 +2,7 @@
 
 GenLayer Contract Forge is a practical builder workspace for GenLayer projects.
 
-It helps you review a contract, compare revisions, generate submission notes, prepare a deployment pack, and keep the on-chain registry snapshot close at hand.
+It helps you review a contract, compare revisions, generate submission notes, prepare a deployment pack, keep a draft vault across sessions, import source files, and export a shareable bundle.
 
 The app is intentionally focused on GenLayer only. It is not a trading dashboard, not a generic AI demo, and not a finance tool.
 
@@ -13,6 +13,9 @@ The app is intentionally focused on GenLayer only. It is not a trading dashboard
 - Produces a judge-friendly report, a starter skeleton, and a test plan.
 - Compares two contract versions and highlights score, method, and risk changes.
 - Generates a deployment pack and a submission pack you can paste into a repo, PR, or hackathon form.
+- Saves drafts locally so you can reopen work across sessions.
+- Imports `.py`, `.txt`, or `.md` source files directly into the workspace.
+- Exports the whole workspace as markdown or JSON for sharing with teammates and reviewers.
 - Keeps the deployed Studionet registry details visible in the UI.
 
 ## Why It Exists
@@ -27,8 +30,9 @@ This tool is meant to help builders move from a rough idea to a reviewable GenLa
 2. Run analysis.
 3. Review the score, findings, profile, and next steps.
 4. Compare against a previous version if needed.
-5. Copy the deploy pack or submission pack.
-6. Ship the cleaned contract or hand it to reviewers.
+5. Save the draft if you want to return later.
+6. Copy the deploy pack, submission pack, or full bundle.
+7. Ship the cleaned contract or hand it to reviewers.
 
 ## Core Features
 
@@ -61,6 +65,19 @@ This tool is meant to help builders move from a rough idea to a reviewable GenLa
 - Lists contract classes, public views, public writes, and tags
 - Includes a short one-line description
 - Adds follow-up notes for builders and judges
+
+### Draft vault
+
+- Stores the current workspace in local storage
+- Lets you reopen old drafts with one click
+- Keeps recent versions visible for quick handoff
+
+### Import and export
+
+- Import contract source from a local file
+- Download the analysis report as markdown
+- Download the deploy pack and submission pack separately
+- Export the whole workspace as a JSON bundle
 
 ## On-Chain Registry
 
@@ -109,6 +126,9 @@ scripts/        verification helpers
 - risky API usage
 - deployment readiness
 - docs and test hints
+- multi-version comparison
+- file import/export support
+- local draft persistence
 
 ## Intended Audience
 
