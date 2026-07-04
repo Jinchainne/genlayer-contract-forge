@@ -143,7 +143,7 @@ export default function OccupancyPage() {
   const [stations, setStations] = useState<StationProfile[]>([]);
   const [selectedStationId, setSelectedStationId] = useState(DEFAULT_STATION_ID);
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
-  const [connectionNote, setConnectionNote] = useState('Use your webcam or paste an HTTP bridge URL for a LAN / AI camera.');
+  const [connectionNote, setConnectionNote] = useState('Use your webcam or paste a live camera bridge URL for a LAN / AI camera.');
   const [count, setCount] = useState(0);
   const [avgScore, setAvgScore] = useState(0);
   const [detections, setDetections] = useState<OccupancyDetection[]>([]);
@@ -733,7 +733,7 @@ export default function OccupancyPage() {
                             >
                               <p className="font-bold">{station.label}</p>
                               <p className="mt-1 text-xs text-white/55">
-                                {station.mode === 'webcam' ? 'Webcam' : station.mode === 'snapshot' ? 'Snapshot bridge' : 'LAN / RTSP / ONVIF'} · {station.location} · {regionLabel(station.region)}
+                                {station.mode === 'webcam' ? 'Webcam' : station.mode === 'snapshot' ? 'Live bridge' : 'LAN / RTSP / ONVIF'} · {station.location} · {regionLabel(station.region)}
                               </p>
                             </button>
                             <button

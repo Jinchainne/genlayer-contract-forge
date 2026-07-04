@@ -19,7 +19,7 @@ The repo is intentionally focused on GenLayer. It is not a generic dashboard or 
 
 ### Occupancy AI Desk
 
-- Counts people live from a webcam or from a camera bridge URL.
+- Counts people live from a webcam or from a live camera bridge URL.
 - Draws bounding boxes around detected people in real time.
 - Supports saved camera stations and quick switching.
 - Supports counting across the full frame or only the upper or lower half.
@@ -34,8 +34,8 @@ This is the part to use for a real office, store, warehouse, or branch camera.
 Browsers do not read RTSP directly. For internal AI cameras, the recommended setup is:
 
 1. Keep the camera on your internal LAN.
-2. Expose a small bridge service that returns a browser-readable JPEG snapshot.
-3. Point `Occupancy AI Desk` at that snapshot URL.
+2. Expose a small bridge service that returns a browser-readable live frame.
+3. Point `Occupancy AI Desk` at that live frame URL.
 4. Use the built-in `Test connection` button before starting detection.
 
 ### Supported internal camera patterns
@@ -43,7 +43,7 @@ Browsers do not read RTSP directly. For internal AI cameras, the recommended set
 - Webcam on the same machine running the browser.
 - RTSP camera exposed through a local bridge.
 - ONVIF camera exposed through a local bridge.
-- Vendor AI camera or NVR that provides a snapshot endpoint.
+- Vendor AI camera or NVR that provides a live frame or snapshot endpoint.
 
 ### Recommended bridge contract
 
@@ -57,26 +57,26 @@ The bridge should:
 
 ### Example bridge flow
 
-If your camera system already exposes a snapshot URL, use it directly:
+If your camera system already exposes a live frame or current-image URL, use it directly:
 
 ```text
 https://camera-lan.local/snapshot.jpg
 ```
 
-If your camera only exposes RTSP or ONVIF, place a small helper in front of it that converts the stream into a single-frame snapshot URL.
+If your camera only exposes RTSP or ONVIF, place a small helper in front of it that converts the stream into a browser-readable live frame URL.
 
 Typical patterns:
 
-- NVR snapshot endpoint
-- Home Assistant camera snapshot URL
-- Frigate / Shinobi / Agent DVR snapshot URL
+- NVR live frame endpoint
+- Home Assistant camera image endpoint
+- Frigate / Shinobi / Agent DVR live frame endpoint
 - A custom internal gateway that polls RTSP and serves `/camera.jpg`
 
 ### How to connect it in the app
 
 1. Open `/occupancy`.
-2. Select `Snapshot bridge` or `LAN / RTSP / ONVIF`.
-3. Paste the bridge URL into `Bridge URL`.
+2. Select `Live bridge` or `LAN / RTSP / ONVIF`.
+3. Paste the bridge URL into `Live camera URL`.
 4. Click `Test connection`.
 5. Click `Start source`.
 6. Save the station if you want to reuse that camera later.
@@ -140,7 +140,7 @@ npm run verify:contract
 1. Open `/occupancy`.
 2. Choose a source mode:
    - `Webcam` for the local machine camera
-   - `Snapshot bridge` for a browser-readable camera frame
+   - `Live bridge` for a browser-readable camera frame
    - `LAN / RTSP / ONVIF` for camera systems behind a bridge
 3. Enter a camera label and location.
 4. Set the counting threshold.
@@ -231,6 +231,5 @@ scripts/        verification helpers
 
 - Keep secrets out of the repository.
 - Keep internal camera credentials on the LAN-side bridge, not in the browser.
-- For business use, prefer a stable snapshot endpoint over direct stream access.
+- For business use, prefer a stable live frame endpoint over direct stream access.
 - The UI is designed as a working product surface, not a landing page.
-
