@@ -20,7 +20,7 @@ const items = [
 ];
 
 const community = [
-  { label: 'Discord', href: 'https://discord.gg/VpfmXEMN66', icon: MessageCircle },
+  { label: 'Discord', href: 'https://discord.com/invite/8Jm4v89VAu', icon: MessageCircle },
   { label: 'Telegram', href: 'https://t.me/genlayer', icon: Send },
   { label: 'X', href: 'https://x.com/genlayer', icon: Globe },
   { label: 'GitHub', href: 'https://github.com/genlayerlabs', icon: Github },
