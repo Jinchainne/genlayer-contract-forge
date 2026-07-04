@@ -86,6 +86,7 @@ This tool is meant to help builders move from a rough idea to a reviewable GenLa
 - Draws bounding boxes around detected people
 - Keeps a snapshot history in local storage
 - Builds a GenLayer command for writing occupancy state to the registry
+- Supports webcam input plus bridge URLs for LAN, RTSP, ONVIF, and vendor camera snapshots
 
 ## On-Chain Registry
 

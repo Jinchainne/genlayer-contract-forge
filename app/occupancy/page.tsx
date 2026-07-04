@@ -1,12 +1,28 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Activity, AlertTriangle, ArrowUpRight, Camera, ClipboardCopy, Download, Play, RefreshCcw, ShieldCheck, Square, Users } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  ArrowUpRight,
+  Camera,
+  CheckCircle2,
+  ClipboardCopy,
+  Download,
+  Globe,
+  Link2,
+  Play,
+  ShieldCheck,
+  Square,
+  Users,
+} from 'lucide-react';
 import occupancyDeployment from '../../contracts/occupancy_deployment.json';
 import { buildOccupancyPacket, buildRegisterCommand, occupancyStatus, type OccupancyDetection, type OccupancySnapshot } from '../../src/lib/occupancy';
 import TopNav from '../components/top-nav';
 
 type SavedSnapshot = OccupancySnapshot & { id: string };
+type CameraMode = 'webcam' | 'snapshot' | 'bridge';
+type ConnectionState = 'idle' | 'testing' | 'ready' | 'error';
 
 const STORAGE_KEY = 'genlayer-occupancy-desk:v1';
 
@@ -41,20 +57,27 @@ function Metric({ label, value, hint }: { label: string; value: string; hint?: s
 
 export default function OccupancyPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteImageRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const modelRef = useRef<null | {
-    detect: (video: HTMLVideoElement, maxBoxes?: number, score?: number) => Promise<OccupancyDetection[]>;
+    detect: (video: HTMLVideoElement | HTMLImageElement, maxBoxes?: number, score?: number) => Promise<OccupancyDetection[]>;
   }>(null);
   const activeRef = useRef(false);
   const loopRef = useRef<number | null>(null);
+  const loopKindRef = useRef<'raf' | 'timeout' | null>(null);
+  const remoteFrameRef = useRef(0);
 
   const [loadingModel, setLoadingModel] = useState(true);
   const [cameraOn, setCameraOn] = useState(false);
   const [status, setStatus] = useState('Idle');
+  const [cameraMode, setCameraMode] = useState<CameraMode>('webcam');
   const [threshold, setThreshold] = useState(4);
   const [sourceLabel, setSourceLabel] = useState('Lobby Camera');
   const [location, setLocation] = useState('Main entrance');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
+  const [connectionNote, setConnectionNote] = useState('Use your webcam or paste an HTTP bridge URL for a LAN / AI camera.');
   const [count, setCount] = useState(0);
   const [avgScore, setAvgScore] = useState(0);
   const [detections, setDetections] = useState<OccupancyDetection[]>([]);
@@ -68,8 +91,13 @@ export default function OccupancyPage() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { history?: SavedSnapshot[] };
+      const parsed = JSON.parse(raw) as { history?: SavedSnapshot[]; cameraMode?: CameraMode; sourceUrl?: string; sourceLabel?: string; location?: string; threshold?: number };
       if (Array.isArray(parsed.history)) setHistory(parsed.history);
+      if (parsed.cameraMode) setCameraMode(parsed.cameraMode);
+      if (parsed.sourceUrl) setSourceUrl(parsed.sourceUrl);
+      if (parsed.sourceLabel) setSourceLabel(parsed.sourceLabel);
+      if (parsed.location) setLocation(parsed.location);
+      if (typeof parsed.threshold === 'number') setThreshold(parsed.threshold);
     } catch {
       // ignore broken local state
     }
@@ -77,8 +105,8 @@ export default function OccupancyPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ history }));
-  }, [history]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, cameraMode, sourceUrl, sourceLabel, location, threshold }));
+  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +145,7 @@ export default function OccupancyPage() {
 
   useEffect(() => {
     return () => {
-      stopCamera();
+      stopSource();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -148,43 +176,113 @@ export default function OccupancyPage() {
     window.setTimeout(() => setCopyState(prev => ({ ...prev, [key]: false })), 1200);
   }
 
-  async function startCamera() {
+  function scheduleNextLoop() {
+    if (!activeRef.current) return;
+    if (cameraMode === 'webcam') {
+      loopKindRef.current = 'raf';
+      loopRef.current = window.requestAnimationFrame(detectLoop);
+      return;
+    }
+    loopKindRef.current = 'timeout';
+    loopRef.current = window.setTimeout(detectLoop, 350);
+  }
+
+  function frameUrl(url: string) {
+    const joiner = url.includes('?') ? '&' : '?';
+    return `${url}${joiner}_ts=${Date.now()}`;
+  }
+
+  async function loadRemoteFrame(url: string) {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Could not load the camera frame. Check the bridge URL and CORS settings.'));
+      img.src = frameUrl(url);
+    });
+  }
+
+  async function testRemoteSource() {
+    if (!sourceUrl.trim()) {
+      setConnectionState('error');
+      setConnectionNote('Paste a snapshot or bridge URL first.');
+      return;
+    }
+    setConnectionState('testing');
+    setStatus('Testing source');
+    try {
+      await loadRemoteFrame(sourceUrl.trim());
+      setConnectionState('ready');
+      setConnectionNote('Camera bridge is reachable.');
+      setStatus('Source ready');
+    } catch (err) {
+      setConnectionState('error');
+      setConnectionNote(err instanceof Error ? err.message : 'Bridge connection failed.');
+      setStatus('Source error');
+    }
+  }
+
+  async function startSource() {
     setError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      stopSource();
+      if (cameraMode === 'webcam') {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setConnectionState('ready');
+        setConnectionNote('Webcam connected.');
+        setStatus('Camera on');
+      } else {
+        if (!sourceUrl.trim()) {
+          throw new Error('Add a snapshot or bridge URL before starting.');
+        }
+        await loadRemoteFrame(sourceUrl.trim());
+        setConnectionState('ready');
+        setConnectionNote('Remote camera bridge connected.');
+        setStatus('Feed on');
       }
       setCameraOn(true);
-      setStatus('Camera on');
       activeRef.current = true;
       void detectLoop();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Camera permission denied');
+      setConnectionState('error');
+      setConnectionNote(err instanceof Error ? err.message : 'Camera connection failed.');
+      setError(err instanceof Error ? err.message : 'Camera connection failed');
       setStatus('Camera off');
     }
   }
 
-  function stopCamera() {
+  function stopSource() {
     activeRef.current = false;
     setCameraOn(false);
+    setConnectionState('idle');
     if (loopRef.current) {
-      window.cancelAnimationFrame(loopRef.current);
+      if (loopKindRef.current === 'timeout') {
+        window.clearTimeout(loopRef.current);
+      } else {
+        window.cancelAnimationFrame(loopRef.current);
+      }
       loopRef.current = null;
+      loopKindRef.current = null;
     }
     streamRef.current?.getTracks().forEach(track => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+    }
+    if (remoteImageRef.current) {
+      remoteImageRef.current.removeAttribute('src');
     }
     const ctx = canvasRef.current?.getContext('2d');
     if (ctx && canvasRef.current) {
@@ -194,22 +292,54 @@ export default function OccupancyPage() {
   }
 
   async function detectLoop() {
-    if (!activeRef.current || !videoRef.current || !canvasRef.current || !modelRef.current) {
-      loopRef.current = window.requestAnimationFrame(detectLoop);
-      return;
-    }
-
-    const video = videoRef.current;
-    if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
-      loopRef.current = window.requestAnimationFrame(detectLoop);
-      return;
-    }
-
-    canvasRef.current.width = video.videoWidth;
-    canvasRef.current.height = video.videoHeight;
-
     try {
-      const results = await modelRef.current.detect(video, 20, 0.45);
+      if (!activeRef.current || !canvasRef.current || !modelRef.current) {
+        scheduleNextLoop();
+        return;
+      }
+
+      let input: HTMLVideoElement | HTMLImageElement | null = null;
+      let width = 0;
+      let height = 0;
+
+      if (cameraMode === 'webcam') {
+        const video = videoRef.current;
+        if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+          scheduleNextLoop();
+          return;
+        }
+        input = video;
+        width = video.videoWidth;
+        height = video.videoHeight;
+      } else {
+        const url = sourceUrl.trim();
+        if (!url) {
+          setStatus('No source URL');
+          scheduleNextLoop();
+          return;
+        }
+        const displayFrame = remoteImageRef.current;
+        if (!displayFrame) {
+          scheduleNextLoop();
+          return;
+        }
+        displayFrame.src = frameUrl(url);
+        await displayFrame.decode();
+        if (!activeRef.current) return;
+        input = displayFrame;
+        width = displayFrame.naturalWidth || displayFrame.width;
+        height = displayFrame.naturalHeight || displayFrame.height;
+      }
+
+      if (!input || !width || !height) {
+        scheduleNextLoop();
+        return;
+      }
+
+      canvasRef.current.width = width;
+      canvasRef.current.height = height;
+
+      const results = await modelRef.current.detect(input, 20, 0.45);
       const next = results.filter(result => result.class === 'person' && result.score >= 0.45);
       const nextAvg =
         results.length > 0
@@ -243,7 +373,7 @@ export default function OccupancyPage() {
       setStatus('Detection error');
     }
 
-    loopRef.current = window.requestAnimationFrame(detectLoop);
+    scheduleNextLoop();
   }
 
   function saveSnapshot() {
@@ -338,6 +468,78 @@ export default function OccupancyPage() {
                 </label>
               </div>
 
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-3">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'webcam' as const, label: 'Webcam', icon: Camera },
+                    { id: 'snapshot' as const, label: 'Snapshot bridge', icon: Link2 },
+                    { id: 'bridge' as const, label: 'LAN / RTSP / ONVIF', icon: Globe },
+                  ].map(option => {
+                    const active = cameraMode === option.id;
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          stopSource();
+                          setCameraMode(option.id);
+                          setConnectionState('idle');
+                          setConnectionNote(
+                            option.id === 'webcam'
+                              ? 'Use the local webcam on this device.'
+                              : 'Paste the HTTP snapshot or bridge URL from your camera gateway.',
+                          );
+                        }}
+                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          active ? 'border-red-600 bg-red-600 text-white' : 'border-black/10 bg-white text-black hover:bg-black/5'
+                        }`}
+                      >
+                        <Icon size={15} />
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 text-sm text-black/60">
+                  {cameraMode === 'webcam'
+                    ? 'Runs directly from the browser on this machine.'
+                    : 'For RTSP, ONVIF, or vendor cloud cameras, point this field at a bridge that exposes a browser-readable JPEG snapshot endpoint.'}
+                </p>
+              </div>
+
+              {cameraMode !== 'webcam' ? (
+                <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                  <label className="grid gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Bridge URL</span>
+                    <input
+                      value={sourceUrl}
+                      onChange={e => setSourceUrl(e.target.value)}
+                      placeholder="https://bridge.local/camera.jpg"
+                      className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                    />
+                  </label>
+                  <div className="grid gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Connection</span>
+                    <div
+                      className={`rounded-[16px] border px-4 py-3 text-sm font-bold ${
+                        connectionState === 'ready'
+                          ? 'border-green-600/20 bg-green-50 text-green-700'
+                          : connectionState === 'error'
+                            ? 'border-red-600/20 bg-red-50 text-red-700'
+                            : 'border-black/15 bg-black/5 text-black/70'
+                      }`}
+                    >
+                      {connectionState === 'ready' ? 'Connected' : connectionState === 'testing' ? 'Testing' : connectionState === 'error' ? 'Needs attention' : 'Idle'}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-[18px] border border-black/10 bg-white p-3 text-sm text-black/70">
+                <span className="font-semibold text-black">Best fit for home cameras:</span> RTSP or ONVIF through a local bridge that serves a JPEG snapshot URL. The app connects to that URL, shows the live frame, and runs people detection on it.
+              </div>
+
               <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                 <label className="grid gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Alert threshold</span>
@@ -357,34 +559,54 @@ export default function OccupancyPage() {
               </div>
 
               <div className="relative overflow-hidden rounded-[22px] border border-black/10 bg-black">
-                <video ref={videoRef} playsInline muted className="aspect-video w-full object-cover" />
+                {cameraMode === 'webcam' ? (
+                  <video ref={videoRef} playsInline muted className="aspect-video w-full object-cover" />
+                ) : (
+                  <img
+                    ref={remoteImageRef}
+                    crossOrigin="anonymous"
+                    alt="Remote camera stream"
+                    className="aspect-video w-full object-cover"
+                  />
+                )}
                 <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
                 {!cameraOn ? (
                   <div className="absolute inset-0 grid place-items-center bg-black/85 text-white">
                     <div className="text-center">
                       <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/55">Camera idle</p>
-                      <p className="mt-2 text-xl font-black">Start the webcam to track people</p>
+                      <p className="mt-2 text-xl font-black">
+                        {cameraMode === 'webcam' ? 'Start the webcam to track people' : 'Connect the camera bridge to start tracking'}
+                      </p>
                     </div>
                   </div>
                 ) : null}
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <ActionButton onClick={startCamera} disabled={cameraOn || loadingModel} className="bg-black text-white hover:bg-black/90">
-                  <Play size={16} /> {loadingModel ? 'Loading model' : 'Start camera'}
+                <ActionButton onClick={startSource} disabled={cameraOn || loadingModel} className="bg-black text-white hover:bg-black/90">
+                  <Play size={16} /> {loadingModel ? 'Loading model' : cameraMode === 'webcam' ? 'Start webcam' : 'Start source'}
                 </ActionButton>
-                <ActionButton onClick={stopCamera} disabled={!cameraOn} className="border border-black/15 bg-white text-black hover:bg-black/5">
-                  <Square size={16} /> Stop camera
+                <ActionButton onClick={stopSource} disabled={!cameraOn} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Square size={16} /> Stop source
                 </ActionButton>
                 <ActionButton onClick={saveSnapshot} className="border border-red-600/20 bg-red-600 text-white hover:bg-red-700">
                   <ShieldCheck size={16} /> Save snapshot
                 </ActionButton>
+                {cameraMode !== 'webcam' ? (
+                  <ActionButton onClick={testRemoteSource} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                    <CheckCircle2 size={16} /> Test connection
+                  </ActionButton>
+                ) : null}
                 <ActionButton onClick={() => copyText('command', command)} className="border border-black/15 bg-white text-black hover:bg-black/5">
                   <ClipboardCopy size={16} /> {copyState.command ? 'Command copied' : 'Copy GenLayer command'}
                 </ActionButton>
                 <ActionButton onClick={() => copyText('packet', packet)} className="border border-black/15 bg-white text-black hover:bg-black/5">
                   <Download size={16} /> {copyState.packet ? 'Packet copied' : 'Copy packet'}
                 </ActionButton>
+              </div>
+
+              <div className="rounded-[16px] border border-black/10 bg-black/5 p-4 text-sm text-black/70">
+                {connectionNote}
               </div>
 
               {error ? <p className="rounded-[16px] border border-red-600/20 bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
