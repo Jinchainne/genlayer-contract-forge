@@ -407,8 +407,11 @@ export default function Page() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
-      <div className="mx-auto max-w-[1600px] px-4 py-4 lg:px-6">
-        <TopNav />
+      <div className="mx-auto max-w-[1800px] px-4 py-4 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-4 lg:px-6">
+        <div className="mb-4 lg:mb-0">
+          <TopNav />
+        </div>
+        <div className="min-w-0">
         <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
@@ -886,9 +889,10 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
           </Panel>
         </section>
 
-        <footer className="pb-5 pt-4 text-center text-xs text-black/45">
-          Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.
-        </footer>
+          <footer className="pb-5 pt-4 text-center text-xs text-black/45">
+            Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.
+          </footer>
+        </div>
       </div>
       <input ref={fileInputRef} type="file" accept=".py,.txt,.md" className="hidden" onChange={handleImport} />
     </main>

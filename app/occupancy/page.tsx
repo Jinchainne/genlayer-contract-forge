@@ -39,6 +39,43 @@ type StationProfile = {
 
 const STORAGE_KEY = 'genlayer-occupancy-desk:v1';
 const DEFAULT_STATION_ID = 'default-station';
+const PUBLIC_CAMERAS = [
+  {
+    id: 'washington-monument',
+    name: 'Washington Monument',
+    location: 'Washington, DC',
+    sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=NGjLGGtpwbufJGuATXQhWQ%3D%3D&202607040700',
+    pageUrl: 'https://www.earthcam.com/usa/dc/washingtonmonument/',
+  },
+  {
+    id: 'abbey-road',
+    name: 'Abbey Road',
+    location: 'London, England',
+    sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=qNvv42vqjNEKe80k0mCm0w%3D%3D&202607040700',
+    pageUrl: 'https://www.earthcam.com/world/england/london/abbeyroad/',
+  },
+  {
+    id: 'bourbon-street',
+    name: 'Bourbon Street',
+    location: 'New Orleans, Louisiana',
+    sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=N8RUAQGBH7drZ4LlKEGtVw%3D%3D&202607040700',
+    pageUrl: 'https://www.earthcam.com/usa/louisiana/neworleans/bourbonstreet/',
+  },
+  {
+    id: 'san-francisco',
+    name: 'San Francisco Bay',
+    location: 'San Francisco, California',
+    sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=qvXEewsDItjfme6%2BYcScww%3D%3D&202607040700',
+    pageUrl: 'https://www.earthcam.com/cams/california/sanfrancisco/',
+  },
+  {
+    id: 'niagara-falls',
+    name: 'Niagara Falls',
+    location: 'Ontario, Canada',
+    sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=EwPAynde%2BEMWfS37IbkAKA%3D%3D&202607040700',
+    pageUrl: 'https://www.earthcam.com/canada/niagarafalls/',
+  },
+] as const;
 
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
@@ -251,6 +288,10 @@ export default function OccupancyPage() {
   const bridgeGuide = useMemo(() => buildBridgeGuide(sourceLabel, sourceUrl), [sourceLabel, sourceUrl]);
   const occupancy = occupancyStatus(count, threshold);
 
+  function proxyCameraUrl(url: string) {
+    return `/api/camera-proxy?url=${encodeURIComponent(url)}`;
+  }
+
   async function copyText(key: string, value: string) {
     await navigator.clipboard.writeText(value);
     setCopyState(prev => ({ ...prev, [key]: true }));
@@ -286,6 +327,20 @@ export default function OccupancyPage() {
     );
   }
 
+  function usePublicCamera(camera: (typeof PUBLIC_CAMERAS)[number]) {
+    const station: StationProfile = {
+      id: camera.id,
+      label: camera.name,
+      mode: 'snapshot',
+      sourceUrl: camera.sourceUrl,
+      location: camera.location,
+      threshold: 4,
+      region: 'full',
+    };
+    applyStation(station);
+    setStations(prev => [station, ...prev.filter(item => item.id !== station.id)].slice(0, 12));
+  }
+
   function saveStation() {
     const station = makeStationProfile();
     setSelectedStationId(station.id);
@@ -317,8 +372,7 @@ export default function OccupancyPage() {
   }
 
   function frameUrl(url: string) {
-    const joiner = url.includes('?') ? '&' : '?';
-    return `${url}${joiner}_ts=${Date.now()}`;
+    return `${proxyCameraUrl(url)}&_ts=${Date.now()}`;
   }
 
   async function loadRemoteFrame(url: string) {
@@ -542,8 +596,11 @@ export default function OccupancyPage() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
-      <div className="mx-auto max-w-[1600px] px-4 py-4 lg:px-6">
-        <TopNav />
+      <div className="mx-auto max-w-[1800px] px-4 py-4 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-4 lg:px-6">
+        <div className="mb-4 lg:mb-0">
+          <TopNav />
+        </div>
+        <div className="min-w-0">
         <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -696,6 +753,50 @@ export default function OccupancyPage() {
                       No saved stations yet. Save one to reuse the same camera, zone, and threshold later.
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div className="rounded-[18px] border border-black/10 bg-white p-4">
+                <div className="flex items-center gap-2">
+                  <Camera size={16} className="text-red-700" />
+                  <h3 className="text-base font-black">Public demo cameras</h3>
+                </div>
+                <p className="mt-2 text-sm text-black/60">
+                  Curated public webcams for demos and smoke tests. They load through the same proxy the app uses for bridge URLs.
+                </p>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {PUBLIC_CAMERAS.map(camera => (
+                    <div key={camera.id} className="overflow-hidden rounded-[18px] border border-black/10 bg-black/5">
+                      <div className="relative aspect-video bg-black">
+                        <img
+                          src={proxyCameraUrl(camera.sourceUrl)}
+                          alt={camera.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3 text-white">
+                          <p className="text-sm font-black">{camera.name}</p>
+                          <p className="text-xs text-white/75">{camera.location}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+                        <a
+                          href={camera.pageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-black/60 underline decoration-black/30 underline-offset-4 hover:text-black"
+                        >
+                          Open source page
+                        </a>
+                        <ActionButton
+                          onClick={() => usePublicCamera(camera)}
+                          className="border border-red-600/20 bg-red-600 px-3 py-2 text-xs text-white hover:bg-red-700"
+                        >
+                          <Play size={14} /> Use demo
+                        </ActionButton>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -934,6 +1035,7 @@ export default function OccupancyPage() {
               </div>
             </Panel>
           </div>
+        </div>
         </div>
       </div>
     </main>

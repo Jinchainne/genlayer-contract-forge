@@ -24,6 +24,7 @@ The repo is intentionally GenLayer-only. It is not a trading dashboard or a gene
 - Draws bounding boxes around detected people in real time.
 - Supports multiple saved camera stations with quick switching.
 - Lets you count across the full frame or focus on the upper or lower half of the view.
+- Includes curated public webcam presets for demo and smoke testing.
 - Builds a GenLayer occupancy packet and register command.
 - Keeps snapshot history in local storage.
 - Provides a bridge guide for webcam, LAN, RTSP, ONVIF, and vendor camera snapshots.
