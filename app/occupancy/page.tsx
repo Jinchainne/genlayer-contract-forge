@@ -798,11 +798,53 @@ export default function OccupancyPage() {
                 </div>
               </div>
 
+              <div className="rounded-[18px] border border-cyan-400/20 bg-[linear-gradient(180deg,rgba(10,18,35,0.96),rgba(6,10,18,0.98))] p-4">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-cyan-300" />
+                  <h3 className="text-base font-black">Enterprise camera setup</h3>
+                </div>
+                <p className="mt-2 text-sm text-white/65">
+                  Use this flow for office, store, warehouse, or branch cameras. The app should receive a browser-readable live frame URL, not a raw RTSP stream.
+                </p>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {[
+                    {
+                      title: '1. Keep camera private',
+                      text: 'Place the camera, NVR, or AI gateway on your LAN and keep credentials off the public internet.',
+                    },
+                    {
+                      title: '2. Expose a live frame bridge',
+                      text: 'Return a current JPEG/PNG frame from your bridge, or use an existing NVR snapshot endpoint.',
+                    },
+                    {
+                      title: '3. Paste the live URL',
+                      text: 'Put that bridge URL in Live camera URL. This can be a local helper, gateway, or vendor endpoint.',
+                    },
+                    {
+                      title: '4. Test and start',
+                      text: 'Press Test connection first, then Start source. Save the station when it works.',
+                    },
+                  ].map(step => (
+                    <div key={step.title} className="rounded-[16px] border border-white/10 bg-white/5 p-3">
+                      <p className="text-sm font-black text-white">{step.title}</p>
+                      <p className="mt-1 text-sm text-white/60">{step.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {['Webcam', 'RTSP bridge', 'ONVIF bridge', 'NVR snapshot', 'Vendor gateway'].map(label => (
+                    <span key={label} className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-xs font-semibold text-white/70">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
                 <div className="flex flex-wrap gap-2">
                   {[
                     { id: 'webcam' as const, label: 'Webcam', icon: Camera },
-                    { id: 'snapshot' as const, label: 'Snapshot bridge', icon: Link2 },
+                    { id: 'snapshot' as const, label: 'Live bridge', icon: Link2 },
                     { id: 'bridge' as const, label: 'LAN / RTSP / ONVIF', icon: Globe },
                   ].map(option => {
                     const active = cameraMode === option.id;
@@ -818,7 +860,7 @@ export default function OccupancyPage() {
                           setConnectionNote(
                             option.id === 'webcam'
                               ? 'Use the local webcam on this device.'
-                              : 'Paste the HTTP snapshot or bridge URL from your camera gateway.',
+                              : 'Paste the live camera bridge URL from your gateway.',
                           );
                         }}
                         className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
@@ -834,18 +876,18 @@ export default function OccupancyPage() {
                 <p className="mt-3 text-sm text-white/60">
                   {cameraMode === 'webcam'
                     ? 'Runs directly from the browser on this machine.'
-                    : 'For RTSP, ONVIF, or vendor cloud cameras, point this field at a bridge that exposes a browser-readable JPEG snapshot endpoint.'}
+                    : 'For RTSP, ONVIF, or vendor cloud cameras, point this field at a bridge that exposes a browser-readable live frame endpoint.'}
                 </p>
               </div>
 
               {cameraMode !== 'webcam' ? (
                 <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                   <label className="grid gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Bridge URL</span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Live camera URL</span>
                     <input
                       value={sourceUrl}
                       onChange={e => setSourceUrl(e.target.value)}
-                      placeholder="https://bridge.local/camera.jpg"
+                      placeholder="https://bridge.local/live-frame"
                       className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 outline-none transition focus:border-red-600"
                     />
                   </label>
@@ -867,7 +909,7 @@ export default function OccupancyPage() {
               ) : null}
 
               <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-3 text-sm text-white/70">
-                <span className="font-semibold text-white">Best fit for home cameras:</span> RTSP or ONVIF through a local bridge that serves a JPEG snapshot URL. The app connects to that URL, shows the live frame, and runs people detection on it.
+                <span className="font-semibold text-white">Best fit for home cameras:</span> RTSP or ONVIF through a local bridge that serves a live frame URL. The app polls that frame continuously and runs people detection on it.
               </div>
 
               <div className="grid gap-2 md:grid-cols-[1fr_auto]">

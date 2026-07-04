@@ -485,25 +485,33 @@ export default function Page() {
                 </label>
               </div>
 
-              <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-                <label className="grid gap-2">
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Preset</span>
-                  <select
-                    value={selectedPreset}
-                    onChange={e => loadPreset(e.target.value)}
-                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
-                  >
-                    {presets.map(preset => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="grid gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Updated</span>
-                  <div className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-sm text-black/65">
-                    {lastSaved ? new Date(lastSaved).toLocaleString() : 'Not saved yet'}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/40">Select a ready-made GenLayer pattern</span>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {presets.map(preset => {
+                    const active = preset.id === selectedPreset;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => loadPreset(preset.id)}
+                        className={`rounded-[18px] border px-4 py-3 text-left transition ${
+                          active
+                            ? 'border-red-600 bg-red-50 shadow-[0_12px_28px_rgba(220,38,38,0.12)]'
+                            : 'border-black/15 bg-black/5 hover:border-black/25 hover:bg-black/10'
+                        }`}
+                      >
+                        <p className="text-sm font-black text-black">{preset.label}</p>
+                        <p className="mt-1 text-xs text-black/55">{preset.title}</p>
+                      </button>
+                    );
+                  })}
+                  <div className="rounded-[18px] border border-black/15 bg-black/5 px-4 py-3">
+                    <span className="block text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Updated</span>
+                    <div className="mt-2 text-sm text-black/65">{lastSaved ? new Date(lastSaved).toLocaleString() : 'Not saved yet'}</div>
                   </div>
                 </div>
               </div>

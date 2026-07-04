@@ -1,55 +1,95 @@
 # GenLayer Contract Forge
 
-GenLayer Contract Forge is a practical two-surface workspace for building, reviewing, and operating GenLayer-ready tools.
+GenLayer Contract Forge is a GenLayer-only builder workspace for two real workflows:
 
-- `Contract Forge` helps you inspect a contract, compare revisions, generate release notes, and prepare a judge-ready submission pack.
-- `Occupancy AI Desk` turns a webcam or camera bridge into a live GenLayer occupancy workflow with snapshots, bounding boxes, and on-chain handoff packets.
+- `Contract Forge` for reviewing, comparing, and packaging GenLayer contracts before deployment.
+- `Occupancy AI Desk` for counting people from a webcam, a local bridge, or an internal AI camera feed and turning the result into a GenLayer-ready occupancy packet.
 
-The repo is intentionally GenLayer-only. It is not a trading dashboard or a generic demo shell.
+The repo is intentionally focused on GenLayer. It is not a generic dashboard or a trading shell.
 
-## What it does
+## What this tool does
 
 ### Contract Forge
 
 - Scores a GenLayer contract for determinism, public surface quality, testing readiness, deployment clarity, and security signals.
 - Detects contract classes, public reads, public writes, and blueprint tags.
-- Suggests the most likely GenLayer use case for the contract.
-- Generates a release checklist before deployment.
-- Produces compare notes, deploy packs, submission packs, and a full report bundle.
-- Lets you import source files, save drafts locally, and export your workspace.
+- Compares revisions and highlights meaningful changes.
+- Generates deploy packs, submission packs, and release checklists.
+- Saves drafts locally for iterative builder workflows.
 
 ### Occupancy AI Desk
 
-- Counts people from a webcam feed or a camera bridge URL.
+- Counts people live from a webcam or from a camera bridge URL.
 - Draws bounding boxes around detected people in real time.
-- Supports multiple saved camera stations with quick switching.
-- Lets you count across the full frame or focus on the upper or lower half of the view.
-- Includes curated public webcam presets for demo and smoke testing.
-- Builds a GenLayer occupancy packet and register command.
-- Keeps snapshot history in local storage.
-- Provides a bridge guide for webcam, LAN, RTSP, ONVIF, and vendor camera snapshots.
+- Supports saved camera stations and quick switching.
+- Supports counting across the full frame or only the upper or lower half.
+- Generates a GenLayer occupancy packet and register command.
+- Keeps recent snapshots in local storage.
+- Includes public demo cameras for smoke tests and UI validation.
 
-## Screenshots
+## Internal AI camera setup
 
-Add screenshots under:
+This is the part to use for a real office, store, warehouse, or branch camera.
+
+Browsers do not read RTSP directly. For internal AI cameras, the recommended setup is:
+
+1. Keep the camera on your internal LAN.
+2. Expose a small bridge service that returns a browser-readable JPEG snapshot.
+3. Point `Occupancy AI Desk` at that snapshot URL.
+4. Use the built-in `Test connection` button before starting detection.
+
+### Supported internal camera patterns
+
+- Webcam on the same machine running the browser.
+- RTSP camera exposed through a local bridge.
+- ONVIF camera exposed through a local bridge.
+- Vendor AI camera or NVR that provides a snapshot endpoint.
+
+### Recommended bridge contract
+
+The bridge should:
+
+- return one current frame as a JPEG or PNG
+- stay on the same LAN as the camera when possible
+- keep authentication inside the network
+- avoid exposing raw camera credentials to the browser
+- refresh often enough to support near real-time occupancy checks
+
+### Example bridge flow
+
+If your camera system already exposes a snapshot URL, use it directly:
 
 ```text
-docs/screenshots/
+https://camera-lan.local/snapshot.jpg
 ```
 
-Suggested files:
+If your camera only exposes RTSP or ONVIF, place a small helper in front of it that converts the stream into a single-frame snapshot URL.
 
-```text
-docs/screenshots/contract-forge.png
-docs/screenshots/occupancy-desk.png
-docs/screenshots/camera-bridge.png
-```
+Typical patterns:
+
+- NVR snapshot endpoint
+- Home Assistant camera snapshot URL
+- Frigate / Shinobi / Agent DVR snapshot URL
+- A custom internal gateway that polls RTSP and serves `/camera.jpg`
+
+### How to connect it in the app
+
+1. Open `/occupancy`.
+2. Select `Snapshot bridge` or `LAN / RTSP / ONVIF`.
+3. Paste the bridge URL into `Bridge URL`.
+4. Click `Test connection`.
+5. Click `Start source`.
+6. Save the station if you want to reuse that camera later.
+
+### Practical note
+
+If you need enterprise usage, treat the bridge as the integration point and keep the camera itself private on the LAN. That gives you a stable browser-facing endpoint without making the camera directly public.
 
 ## Requirements
 
 - Node.js 18 or newer
 - npm
-- A modern browser with webcam permission if you want to use `Occupancy AI Desk`
+- A browser with webcam permission if you want to test `Webcam` mode
 
 ## Install
 
@@ -59,99 +99,72 @@ npm install
 
 ## Run locally
 
-Start the app:
-
 ```bash
 npm run dev
 ```
 
-Then open the local URL shown by Next.js.
+Then open the local URL printed by Next.js.
 
 ## Build
-
-Create a production build:
 
 ```bash
 npm run build
 ```
 
-## Verify GenLayer contract
-
-Run the repository contract check:
+## Verify the GenLayer contract pack
 
 ```bash
 npm run verify:contract
 ```
 
-## How to use the tool
+## How to use Contract Forge
 
-### 1. Contract Forge
+1. Open `/`.
+2. Paste or import a GenLayer contract.
+3. Review the readiness score and findings.
+4. Check the contract profile and public surface.
+5. Compare a newer draft against a previous version if needed.
+6. Copy the deploy pack or submission pack.
+7. Save a draft when you want to return later.
 
-Open `/` and paste a GenLayer contract into the editor.
+### What the output means
 
-Typical workflow:
+- `Readiness` is a practical preflight score.
+- `Verdict` is the short shipping judgment.
+- `Findings` lists issues that deserve attention before review.
+- `Recommended use case` maps the contract to a likely GenLayer workflow.
+- `Release checklist` turns the review into a deployment plan.
 
-1. Choose a preset or import a `.py`, `.txt`, or `.md` file.
-2. Read the score and findings.
-3. Review the contract profile, public surface, and next steps.
-4. Use compare mode if you want to check a previous version.
-5. Copy the deploy pack or submission pack.
-6. Save a draft if you want to return later.
+## How to use Occupancy AI Desk
 
-What the outputs mean:
-
-- `Readiness` shows a practical score for deployment and review.
-- `Verdict` gives a short judgment about shipping readiness.
-- `Findings` lists the main issues to fix before a judge sees the repo.
-- `Recommended use case` tells you how the contract maps to a GenLayer workflow.
-- `Release checklist` turns the analysis into an action list.
-
-### 2. Occupancy AI Desk
-
-Open `/occupancy` and choose the source mode:
-
-- `Webcam` for the local device camera.
-- `Snapshot bridge` for a camera bridge URL that returns a current JPEG frame.
-- `LAN / RTSP / ONVIF` for a home or office camera exposed through a bridge.
-
-How to use it:
-
-1. Enter a camera label and location.
-2. Select the source mode.
-3. If using a bridge, paste the snapshot URL.
-4. Choose a zone focus if you only want the upper or lower half of the frame.
-5. Save the current settings as a station if you want to reuse them later.
-6. Click `Test connection` to confirm the bridge is reachable.
-7. Click `Start source` to begin detection.
-8. Save snapshots or copy the GenLayer packet when you need a handoff artifact.
-
-### Camera bridge note
-
-Browsers do not consume raw RTSP streams directly. For RTSP, ONVIF, or vendor cloud cameras, expose a small local bridge that serves a browser-readable snapshot URL.
-
-The bridge should:
-
-- return one current frame at a time
-- stay on the same LAN as the camera when possible
-- keep auth simple
-- avoid exposing camera credentials to the browser
+1. Open `/occupancy`.
+2. Choose a source mode:
+   - `Webcam` for the local machine camera
+   - `Snapshot bridge` for a browser-readable camera frame
+   - `LAN / RTSP / ONVIF` for camera systems behind a bridge
+3. Enter a camera label and location.
+4. Set the counting threshold.
+5. Pick `Full frame`, `Upper zone`, or `Lower zone`.
+6. Test the connection if you are using a bridge.
+7. Start the source.
+8. Save the snapshot or copy the GenLayer packet when you need a handoff artifact.
 
 ## Output packs
 
 ### Deploy pack
 
-The deploy pack contains:
+Contains:
 
 - contract name
 - readiness score
 - verdict
-- deploy command for Studionet
+- deployment command
 - registry address and transaction references
 - read and write methods
 
 ### Submission pack
 
-The submission pack contains:
+Contains:
 
 - readiness score
 - verdict
@@ -163,7 +176,7 @@ The submission pack contains:
 
 ### Occupancy packet
 
-The occupancy packet contains:
+Contains:
 
 - camera label
 - location
@@ -176,7 +189,7 @@ The occupancy packet contains:
 
 ## GenLayer deployment references
 
-This repo includes GenLayer deployment metadata for the Forge workspace and the occupancy registry.
+This repo ships with deployment metadata for both surfaces.
 
 ### Forge registry
 
@@ -197,7 +210,7 @@ This repo includes GenLayer deployment metadata for the Forge workspace and the 
 ```text
 app/            Next.js app routes and UI
 contracts/      GenLayer contracts and deployment metadata
-public/         visual assets
+public/         brand assets and screenshots
 src/lib/        contract analysis and occupancy helpers
 scripts/        verification helpers
 ```
@@ -216,11 +229,8 @@ scripts/        verification helpers
 
 ## Notes for builders
 
-- The UI uses a black, white, and red system for clarity and scanability.
-- The code is meant to support real handoff workflows, not just screenshots.
-- Keep secrets out of the repo and use environment variables for runtime credentials.
-- For camera bridges, prefer an internal network endpoint or a local helper that does not expose raw camera access to the browser.
+- Keep secrets out of the repository.
+- Keep internal camera credentials on the LAN-side bridge, not in the browser.
+- For business use, prefer a stable snapshot endpoint over direct stream access.
+- The UI is designed as a working product surface, not a landing page.
 
-## License
-
-No license file is included yet. Add one if you plan to open the repo publicly.
