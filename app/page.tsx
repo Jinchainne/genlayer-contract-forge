@@ -486,7 +486,7 @@ export default function Page() {
           Real-time camera monitoring is now available in <a href="/occupancy" className="font-bold underline">Occupancy AI Desk</a>. It counts people live, draws boxes, and prepares a GenLayer snapshot packet.
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+          <div className="grid items-start gap-4 xl:grid-cols-[1.08fr_0.92fr]">
           <Panel>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -755,7 +755,7 @@ export default function Page() {
           </div>
         </div>
 
-        <section className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+        <section className="mt-4 grid items-start gap-4 xl:grid-cols-[0.92fr_1.08fr]">
           <Panel>
             <div className="flex items-center gap-2">
               <Bot size={18} className="text-red-700" />
@@ -800,7 +800,7 @@ export default function Page() {
           </Panel>
         </section>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="mt-4 grid items-start gap-4 xl:grid-cols-[0.92fr_1.08fr]">
           <Panel>
             <div className="flex items-center gap-2">
               <Bot size={18} className="text-red-700" />
@@ -901,7 +901,7 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
           </div>
         </div>
 
-        <section className="mt-4 grid gap-4 xl:grid-cols-3">
+        <section className="mt-4 grid items-start gap-4 xl:grid-cols-3">
           <Panel>
             <div className="flex items-center gap-2">
               <Sparkles size={18} className="text-red-700" />
