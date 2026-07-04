@@ -4,3 +4,5 @@ out/
 coverage/
 *.log
 node_modules
+
+.vercel

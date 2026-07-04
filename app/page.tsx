@@ -30,6 +30,7 @@ import {
   type AnalysisResult,
   type DiffResult,
 } from '../src/lib/analyzer';
+import TopNav from './components/top-nav';
 
 const STORAGE_KEY = 'genlayer-contract-forge:v2';
 
@@ -197,7 +198,7 @@ function Metric({ label, value, hint }: { label: string; value: string; hint?: s
   return (
     <div className="rounded-[18px] border border-black/10 bg-white p-4">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">{label}</p>
-      <p className="mt-2 text-2xl font-black text-black">{value}</p>
+      <p className="mt-2 break-words text-xl font-black leading-tight text-black">{value}</p>
       {hint ? <p className="mt-2 text-sm text-black/55">{hint}</p> : null}
     </div>
   );
@@ -405,11 +406,12 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
       <div className="mx-auto max-w-[1600px] px-4 py-4 lg:px-6">
+        <TopNav />
         <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex items-center justify-center overflow-hidden rounded-[18px] border border-black/10 bg-white px-3 py-2">
-                <img src="/genlayer-mark.svg" alt="GenLayer Studio logo" className="h-12 w-auto max-w-[240px] object-contain" />
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[18px] border border-black/10 bg-white p-2">
+                <img src="/genlayer-mark.svg" alt="GenLayer Studio logo" className="h-full w-full object-contain" />
               </div>
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-black/50">GenLayer Studio</p>

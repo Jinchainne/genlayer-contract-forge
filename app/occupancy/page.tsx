@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type R
 import { Activity, AlertTriangle, ArrowUpRight, Camera, ClipboardCopy, Download, Play, RefreshCcw, ShieldCheck, Square, Users } from 'lucide-react';
 import occupancyDeployment from '../../contracts/occupancy_deployment.json';
 import { buildOccupancyPacket, buildRegisterCommand, occupancyStatus, type OccupancyDetection, type OccupancySnapshot } from '../../src/lib/occupancy';
+import TopNav from '../components/top-nav';
 
 type SavedSnapshot = OccupancySnapshot & { id: string };
 
@@ -152,7 +153,7 @@ export default function OccupancyPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'environment',
+          facingMode: 'user',
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -271,6 +272,7 @@ export default function OccupancyPage() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
       <div className="mx-auto max-w-[1600px] px-4 py-4 lg:px-6">
+        <TopNav />
         <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -356,7 +358,7 @@ export default function OccupancyPage() {
 
               <div className="relative overflow-hidden rounded-[22px] border border-black/10 bg-black">
                 <video ref={videoRef} playsInline muted className="aspect-video w-full object-cover" />
-                <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+                <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
                 {!cameraOn ? (
                   <div className="absolute inset-0 grid place-items-center bg-black/85 text-white">
                     <div className="text-center">
