@@ -1,74 +1,76 @@
 # GenLayer Contract Forge
 
-GenLayer Contract Forge is a standalone builder tool for reviewing, scoring, and shaping GenLayer intelligent contracts before they reach Studio or Studionet.
+GenLayer Contract Forge is a practical builder workspace for GenLayer projects.
 
-This repo is intentionally narrow. It is not a finance dashboard, a trading terminal, or a general AI playground. It focuses on one thing:
+It helps you review a contract, compare revisions, generate submission notes, prepare a deployment pack, and keep the on-chain registry snapshot close at hand.
 
-> helping builders decide whether a GenLayer contract is structurally ready to ship.
+The app is intentionally focused on GenLayer only. It is not a trading dashboard, not a generic AI demo, and not a finance tool.
 
 ## What It Does
 
-- Scores a contract on determinism, GenLayer surface quality, testability, deployment clarity, and security.
-- Detects core GenLayer markers such as `Depends`, `gl.Contract`, `@gl.public.view`, and `@gl.public.write`.
-- Flags anti-patterns that often break deterministic execution or reduce contract safety.
+- Analyzes a GenLayer contract for deterministic structure, public surface quality, testing readiness, deployment clarity, and safety signals.
 - Extracts a contract profile with detected classes, public views, public writes, and blueprint tags.
-- Generates a judge-friendly report, a contract skeleton, and a practical test plan.
+- Produces a judge-friendly report, a starter skeleton, and a test plan.
+- Compares two contract versions and highlights score, method, and risk changes.
+- Generates a deployment pack and a submission pack you can paste into a repo, PR, or hackathon form.
+- Keeps the deployed Studionet registry details visible in the UI.
 
 ## Why It Exists
 
-GenLayer repos are strongest when the contract, tests, deployment path, and explanation all line up. This tool helps builders preflight that story before they publish.
+GenLayer repos are stronger when the contract, tests, deployment path, and explanation all line up.
 
-It was designed after reviewing common patterns from:
-
-- GenLayer boilerplate and deployment workflows
-- utility packages that simplify contract scaffolding
-- Studio/bridge style developer tooling
-- contract-first apps that turn a plain idea into a deployable artifact
+This tool is meant to help builders move from a rough idea to a reviewable GenLayer artifact with less guessing and more structure.
 
 ## Main Workflow
 
-1. Paste or write a GenLayer contract.
-2. Run Forge Analysis.
-3. Review the score, findings, and profile.
-4. Copy the generated skeleton or test plan.
-5. Fix the contract and run the analysis again.
+1. Paste a contract into the editor.
+2. Run analysis.
+3. Review the score, findings, profile, and next steps.
+4. Compare against a previous version if needed.
+5. Copy the deploy pack or submission pack.
+6. Ship the cleaned contract or hand it to reviewers.
 
-## What The Score Means
+## Core Features
 
-- `85-100`: strong candidate
-- `65-84`: promising, but cleanup is needed
-- `0-64`: structural work is still needed
+### Contract analysis
 
-## Score Dimensions
+- Detects `Depends` markers
+- Detects `gl.Contract`
+- Detects `@gl.public.view` and `@gl.public.write`
+- Flags risky APIs and non-deterministic patterns
+- Scores the contract across five practical dimensions
 
-- Determinism
-- GenLayer surface
-- Tests
-- Deployment
-- Security
+### Compare mode
 
-## Output
+- Compares methods between two versions
+- Compares blueprint tags
+- Shows score delta and risk delta
+- Helps reviewers spot regressions quickly
 
-The tool returns:
+### Deploy pack
 
-- readiness score
-- verdict
-- score breakdown
-- findings
-- contract profile
-- next steps
-- generated skeleton
-- generated test plan
+- Includes the contract name
+- Includes the readiness score
+- Includes the deployed registry address and transaction
+- Includes the deploy command for Studionet
+- Lists read and write methods for chain verification
+
+### Submission pack
+
+- Summarizes readiness in a paste-ready block
+- Lists contract classes, public views, public writes, and tags
+- Includes a short one-line description
+- Adds follow-up notes for builders and judges
 
 ## On-Chain Registry
 
-The Forge tool has a deployed GenLayer registry contract on Studionet:
+The Forge workspace includes a deployed GenLayer registry contract on Studionet:
 
 - Contract: `ContractForgeRegistry`
 - Address: `0x3Fd8285D7188aE2A81e740c36D0cf7B23eE42Ed0`
 - Deployment tx: `0x1c08c17d36fa3b55ac900d901407c56635bad56d24c894acf86735af6a12134b`
 
-The first bootstrap record has already been written to the chain with a success snapshot, so the deployed contract is not empty.
+The registry is already bootstrapped with an initial analysis record.
 
 ## Run Locally
 
@@ -83,7 +85,7 @@ Production build:
 npm run build
 ```
 
-Verification:
+Contract verification:
 
 ```bash
 npm run verify:contract
@@ -93,31 +95,30 @@ npm run verify:contract
 
 ```text
 app/            Next.js UI and analysis API
+contracts/      GenLayer registry contract and deployment metadata
 public/         visual assets
-src/lib/        GenLayer analysis engine
-README.md       overview and usage
+src/lib/        analysis engine
+scripts/        verification helpers
 ```
 
-## What The Analyzer Checks
+## Analyzer Coverage
 
-- `# { "Depends": "py-genlayer:..." }`
-- `class X(gl.Contract)`
-- `@gl.public.view`
-- `@gl.public.write`
-- `gl.eq_principle...`
-- web or LLM calls outside a consensus wrapper
-- risky APIs such as `random`, `eval`, `exec`, `os.system`, and `subprocess`
-- hints for tests, deployment, and documentation
+- GenLayer contract markers
+- public read/write surface
+- consensus wrapper usage
+- risky API usage
+- deployment readiness
+- docs and test hints
 
 ## Intended Audience
 
 - GenLayer builders
 - contract reviewers
-- hackathon judges
-- contributors who need a serious preflight check before deployment
+- hackathon teams
+- judges who need a fast but serious preflight view
 
 ## Notes
 
 - This repository is GenLayer-only.
-- It is separate from any trading or finance workspace.
+- The UI is optimized for clarity and shipping, with a white, black, and red theme.
 - No secrets are required for the local analysis flow.

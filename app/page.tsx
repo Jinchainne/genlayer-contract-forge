@@ -1,358 +1,567 @@
 'use client';
 
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Copy, FlaskConical, Layers3, RefreshCcw, ShieldCheck, Sparkles, WandSparkles } from 'lucide-react';
+import { useMemo, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import {
+  ArrowRightLeft,
+  ArrowUpRight,
+  BadgeCheck,
+  Bot,
+  ClipboardCopy,
+  Code2,
+  Copy,
+  Download,
+  FlaskConical,
+  GitCompare,
+  Layers3,
+  MoveRight,
+  RefreshCcw,
+  ShieldCheck,
+  Sparkles,
+  TriangleAlert,
+} from 'lucide-react';
 import forgeDeployment from '../contracts/deployment.json';
+import {
+  analyzeGenLayerContract,
+  compareGenLayerContracts,
+  createDeployPack,
+  createSubmissionPack,
+  generateForgeBrief,
+  type AnalysisResult,
+  type DiffResult,
+} from '../src/lib/analyzer';
 
-type Finding = {
-  level: 'info' | 'warn' | 'error';
-  category: string;
-  title: string;
-  detail: string;
-  fix: string;
-};
-
-type Analysis = {
-  score: number;
-  verdict: string;
-  summary: string;
-  breakdown: Record<string, number>;
-  findings: Finding[];
-  nextSteps: string[];
-  skeleton: string;
-  testPlan: string[];
-  contractNames: string[];
-  publicViews: string[];
-  publicWrites: string[];
-  blueprintTags: string[];
-  report: string;
-};
-
-const seedContract = `# { "Depends": "py-genlayer:test" }
+const primarySample = `# { "Depends": "py-genlayer:test" }
 from genlayer import *
 
-class SimpleGenLayerDecision(gl.Contract):
-    latest_result: str
-
+class ProvenanceRegistry(gl.Contract):
     def __init__(self):
-        self.latest_result = ""
+        self._latest = ""
+        self._total = 0
 
     @gl.public.write
-    def register_report(self, report_hash: str, source_url: str) -> str:
+    def register_event(self, payload: str, source_url: str) -> str:
         def evaluate():
-            prompt = f\"\"\"
-            You are checking whether this report is relevant to the claim.
-            report_hash={report_hash}
+            prompt = f"""
+            You are validating whether a source-backed event is suitable for a GenLayer provenance record.
+            payload={payload}
             source_url={source_url}
             Return only: approved=yes|no;reason=short reason
-            \"\"\"
+            """
             return gl.exec_prompt(prompt).strip()
 
         result = gl.eq_principle_strict_eq(evaluate)
-        self.latest_result = result
+        self._latest = result
+        self._total += 1
         return result
 
     @gl.public.view
     def latest(self) -> str:
-        return self.latest_result`;
+        return self._latest
 
-const badges = [
-  'Depends marker',
-  'gl.Contract shape',
-  'Determinism checks',
-  'Test plan generator',
-  'Deployment readiness',
-  'GenLayer-first docs',
-];
+    @gl.public.view
+    def total(self) -> int:
+        return self._total`;
 
-function Button({ children, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { className?: string }) {
+const compareSample = `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class ProvenanceRegistry(gl.Contract):
+    def __init__(self):
+        self._latest = ""
+
+    @gl.public.write
+    def register_event(self, payload: str) -> str:
+        self._latest = payload.strip()
+        return self._latest
+
+    @gl.public.view
+    def latest(self) -> str:
+        return self._latest`;
+
+const fallbackAnalysis = analyzeGenLayerContract(primarySample, 'ProvenanceRegistry');
+const fallbackDiff = compareGenLayerContracts(primarySample, compareSample, 'ProvenanceRegistry', 'LegacyRegistry');
+
+type CopyStatus = 'idle' | 'copied';
+
+function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <section className={`rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
+}
+
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-[18px] border border-black/10 bg-white p-4">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">{label}</p>
+      <p className="mt-2 text-2xl font-black text-black">{value}</p>
+      {hint ? <p className="mt-2 text-sm text-black/55">{hint}</p> : null}
+    </div>
+  );
+}
+
+function ActionButton({
+  children,
+  className = '',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { className?: string }) {
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 font-semibold transition ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
       {children}
     </button>
   );
 }
 
-function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`forge-panel rounded-[24px] p-5 ${className}`}>{children}</div>;
+function clampTagList(tags: string[]) {
+  return tags.length ? tags : ['none'];
 }
 
 export default function Page() {
-  const [title, setTitle] = useState('GenLayer Contract Forge');
-  const [source, setSource] = useState(seedContract);
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [title, setTitle] = useState('ProvenanceRegistry');
+  const [source, setSource] = useState(primarySample);
+  const [compareSource, setCompareSource] = useState(compareSample);
+  const [analysis, setAnalysis] = useState<AnalysisResult>(() => fallbackAnalysis);
+  const [diff, setDiff] = useState<DiffResult>(() => fallbackDiff);
   const [busy, setBusy] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<Record<string, CopyStatus>>({});
 
-  const scoreTone = useMemo(() => {
-    if (!analysis) return 'text-slate-200';
-    if (analysis.score >= 85) return 'text-emerald-300';
-    if (analysis.score >= 65) return 'text-amber-300';
-    return 'text-rose-300';
-  }, [analysis]);
+  const deployPack = useMemo(
+    () => createDeployPack(analysis, title, forgeDeployment.address, forgeDeployment.tx),
+    [analysis, title],
+  );
 
-  async function runAnalysis() {
+  const submissionPack = useMemo(() => createSubmissionPack(analysis, title), [analysis, title]);
+
+  const brief = useMemo(() => generateForgeBrief(source, title), [source, title]);
+
+  const methodCount = analysis.publicViews.length + analysis.publicWrites.length;
+  const findingCount = analysis.findings.length;
+
+  async function copyText(key: string, text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopyStatus(prev => ({ ...prev, [key]: 'copied' }));
+    window.setTimeout(() => {
+      setCopyStatus(prev => ({ ...prev, [key]: 'idle' }));
+    }, 1200);
+  }
+
+  function loadPrimarySample() {
+    setTitle('ProvenanceRegistry');
+    setSource(primarySample);
+    setCompareSource(compareSample);
+    const next = analyzeGenLayerContract(primarySample, 'ProvenanceRegistry');
+    setAnalysis(next);
+    setDiff(compareGenLayerContracts(primarySample, compareSample, 'ProvenanceRegistry', 'LegacyRegistry'));
+  }
+
+  function loadAutomationSample() {
+    const automation = `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class PolicyRouter(gl.Contract):
+    def __init__(self):
+        self._routes = {}
+
+    @gl.public.write
+    def attach_policy(self, policy_id: str, target: str) -> str:
+        def evaluate():
+            return f"attached:{policy_id}:{target}"
+
+        result = gl.eq_principle_strict_eq(evaluate)
+        self._routes[policy_id] = target
+        return result
+
+    @gl.public.view
+    def route(self, policy_id: str) -> str:
+        return self._routes.get(policy_id, "")`;
+
+    setTitle('PolicyRouter');
+    setSource(automation);
+    setCompareSource(compareSample);
+    const next = analyzeGenLayerContract(automation, 'PolicyRouter');
+    setAnalysis(next);
+    setDiff(compareGenLayerContracts(automation, compareSample, 'PolicyRouter', 'LegacyRegistry'));
+  }
+
+  function runAnalysis() {
     setBusy(true);
     try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title, source }),
-      });
-      setAnalysis(await res.json());
+      const next = analyzeGenLayerContract(source, title);
+      setAnalysis(next);
+      setDiff(compareGenLayerContracts(source, compareSource, title, 'Comparison'));
     } finally {
       setBusy(false);
     }
   }
 
-  async function copySkeleton() {
-    if (!analysis?.skeleton) return;
-    await navigator.clipboard.writeText(analysis.skeleton);
+  function runCompare() {
+    const next = compareGenLayerContracts(source, compareSource, title, 'Comparison');
+    setDiff(next);
   }
 
-  return (
-    <main className="min-h-screen forge-grid text-[15px] text-forge-text">
-      <div className="mx-auto max-w-[1500px] px-4 py-5 lg:px-6">
-        <header className="mb-5 flex flex-col gap-4 rounded-[28px] border border-forge-line bg-[rgba(8,13,22,0.88)] p-5 shadow-glow lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl border border-cyan-400/20 bg-white/95">
-              <img src="/genlayer-mark.svg" alt="GenLayer mark" className="h-12 w-12" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight">GenLayer Contract Forge</h1>
-              <p className="text-sm text-forge-muted">A deep contract analysis tool for builders shipping intelligent contracts on GenLayer.</p>
-            </div>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {badges.map(b => (
-              <div key={b} className="rounded-2xl border border-forge-line bg-forge-panel px-3 py-2 text-center text-xs text-forge-muted">
-                {b}
-              </div>
-            ))}
-          </div>
-        </header>
+  const scoreAccent =
+    analysis.score >= 85 ? 'text-black' : analysis.score >= 65 ? 'text-black' : 'text-black';
 
-        <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-          <Panel>
-            <div className="mb-4 flex items-start justify-between gap-4">
+  return (
+    <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_56%,#f2f2f2_100%)] text-black">
+      <div className="mx-auto max-w-[1600px] px-4 py-4 lg:px-6">
+        <header className="mb-4 rounded-[24px] border border-black/10 bg-white px-5 py-4 shadow-[0_14px_36px_rgba(0,0,0,0.06)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl border border-black/10 bg-black">
+                <img src="/genlayer-mark.svg" alt="GenLayer mark" className="h-10 w-10" />
+              </div>
               <div>
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-cyan-200">
-                  <FlaskConical size={14} /> Contract input
-                </div>
-                <h2 className="text-3xl font-black">Paste a GenLayer contract and get a builder-grade review.</h2>
-                <p className="mt-2 max-w-3xl text-sm text-forge-muted">
-                  The tool scores determinism, GenLayer surface quality, tests, deployment clarity, and security. It also produces a skeleton and an actionable test path.
+                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-black/50">GenLayer Studio</p>
+                <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Contract Forge</h1>
+                <p className="mt-1 text-sm text-black/60">
+                  A builder workspace for review, comparison, deployment packs, and judge-ready submission notes.
                 </p>
               </div>
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 px-4 py-3 text-right">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Readiness</p>
-                <p className={`text-4xl font-black ${scoreTone}`}>{analysis ? `${analysis.score}` : '—'}</p>
-              </div>
             </div>
 
-            <div className="grid gap-4">
-              <div>
-                <div className="forge-label">Title</div>
-                <input value={title} onChange={e => setTitle(e.target.value)} className="forge-input" placeholder="GenLayer Contract Title" />
-              </div>
-              <div>
-                <div className="forge-label">Contract Source</div>
-                <textarea
-                  value={source}
-                  onChange={e => setSource(e.target.value)}
-                  className="forge-input min-h-[380px] resize-y font-mono text-[13px] leading-6"
-                  spellCheck={false}
-                />
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={runAnalysis} disabled={busy} className="bg-gradient-to-r from-cyan-500 to-emerald-400 text-[#071017]">
-                  {busy ? <RefreshCcw className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                  {busy ? 'Analyzing...' : 'Forge Analysis'}
-                </Button>
-                <Button onClick={() => setSource(seedContract)} className="border border-forge-line bg-forge-panel2 text-forge-text">
-                  <RefreshCcw size={16} /> Load sample
-                </Button>
-                <Button onClick={copySkeleton} className="border border-forge-line bg-forge-panel2 text-forge-text">
-                  <Copy size={16} /> Copy skeleton
-                </Button>
-              </div>
-            </div>
-          </Panel>
-
-          <div className="grid gap-5">
-            <Panel>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="text-emerald-300" size={18} />
-                <h3 className="text-xl font-black">Forge summary</h3>
-              </div>
-              <p className="mt-3 text-sm text-forge-muted">
-                {analysis?.summary || 'Run the analyzer to get a readiness score and the first pass on contract quality.'}
-              </p>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {analysis ? Object.entries(analysis.breakdown).map(([key, value]) => (
-                  <div key={key} className="rounded-2xl border border-forge-line bg-forge-panel2 p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">{key}</p>
-                    <p className="mt-2 text-2xl font-black text-white">{value}</p>
-                  </div>
-                )) : (
-                  <div className="col-span-2 rounded-2xl border border-forge-line bg-forge-panel2 p-4 text-sm text-forge-muted">
-                    Scores will appear here after analysis.
-                  </div>
-                )}
-              </div>
-            </Panel>
-
-            <Panel>
-              <div className="flex items-center gap-2">
-                <Sparkles className="text-cyan-300" size={18} />
-                <h3 className="text-xl font-black">Contract profile</h3>
-              </div>
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Contract names</p>
-                  <p className="mt-2 text-sm text-white">{analysis?.contractNames?.length ? analysis.contractNames.join(', ') : 'No contract class detected yet.'}</p>
-                </div>
-                <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Public views</p>
-                  <p className="mt-2 text-sm text-white">{analysis?.publicViews?.length ? analysis.publicViews.join(', ') : 'No public view methods detected yet.'}</p>
-                </div>
-                <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Public writes</p>
-                  <p className="mt-2 text-sm text-white">{analysis?.publicWrites?.length ? analysis.publicWrites.join(', ') : 'No public write methods detected yet.'}</p>
-                </div>
-                <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Blueprint tags</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {analysis?.blueprintTags?.length ? analysis.blueprintTags.map(tag => (
-                      <span key={tag} className="rounded-full border border-forge-line bg-black/30 px-3 py-1 text-xs text-cyan-200">
-                        {tag}
-                      </span>
-                    )) : <span className="text-sm text-forge-muted">No tags yet.</span>}
-                  </div>
-                </div>
-              </div>
-            </Panel>
-
-            <Panel>
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="text-amber-300" size={18} />
-                <h3 className="text-xl font-black">Findings</h3>
-              </div>
-              <div className="mt-4 space-y-3">
-                {analysis?.findings?.length ? analysis.findings.map((finding, index) => (
-                  <div key={`${finding.title}-${index}`} className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${
-                        finding.level === 'error' ? 'bg-rose-500/15 text-rose-300' : finding.level === 'warn' ? 'bg-amber-500/15 text-amber-300' : 'bg-cyan-500/15 text-cyan-300'
-                      }`}>{finding.level}</span>
-                      <span className="text-xs uppercase tracking-[0.2em] text-forge-muted">{finding.category}</span>
-                    </div>
-                    <h4 className="mt-3 font-bold text-white">{finding.title}</h4>
-                    <p className="mt-2 text-sm text-forge-muted">{finding.detail}</p>
-                    <p className="mt-2 text-sm text-emerald-300">Fix: {finding.fix}</p>
-                  </div>
-                )) : (
-                  <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4 text-sm text-forge-muted">
-                    No findings yet. Analyze a contract to populate the review.
-                  </div>
-                )}
-              </div>
-            </Panel>
-
-            <Panel>
-              <div className="flex items-center gap-2">
-                <WandSparkles className="text-cyan-300" size={18} />
-                <h3 className="text-xl font-black">Next steps</h3>
-              </div>
-              <ul className="mt-4 space-y-2 text-sm text-forge-muted">
-                {analysis?.nextSteps?.length ? analysis.nextSteps.map((step, index) => (
-                  <li key={`${step}-${index}`} className="rounded-2xl border border-forge-line bg-forge-panel2 px-4 py-3">{step}</li>
-                )) : <li className="rounded-2xl border border-forge-line bg-forge-panel2 px-4 py-3">Write or paste a contract to generate a next-step plan.</li>}
-              </ul>
-            </Panel>
-          </div>
-        </section>
-
-        <section className="mt-5 grid gap-5 xl:grid-cols-2">
-          <Panel>
-            <div className="flex items-center gap-2">
-              <Layers3 className="text-cyan-300" size={18} />
-              <h3 className="text-xl font-black">Contract skeleton</h3>
-            </div>
-            <pre className="mt-4 max-h-[520px] overflow-auto rounded-2xl border border-forge-line bg-black/35 p-4 text-[12px] leading-6 text-slate-200 whitespace-pre-wrap">{analysis?.skeleton || 'The generated skeleton appears here after analysis.'}</pre>
-          </Panel>
-
-          <Panel>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="text-emerald-300" size={18} />
-              <h3 className="text-xl font-black">Test plan</h3>
-            </div>
-            <div className="mt-4 space-y-3">
-              {(analysis?.testPlan || ['The generated test plan appears here after analysis.']).map((step, index) => (
-                <div key={`${step}-${index}`} className="rounded-2xl border border-forge-line bg-forge-panel2 px-4 py-3 text-sm text-forge-muted">
-                  {step}
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: 'Readiness', value: `${analysis.score}/100` },
+                { label: 'Verdict', value: analysis.verdict },
+                { label: 'Methods', value: String(methodCount) },
+                { label: 'Findings', value: String(findingCount) },
+              ].map(item => (
+                <div key={item.label} className="rounded-[18px] border border-black/10 bg-[#111] px-4 py-3 text-white">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">{item.label}</p>
+                  <p className="mt-1 text-lg font-black">{item.value}</p>
                 </div>
               ))}
             </div>
-            <div className="mt-5 rounded-2xl border border-forge-line bg-black/35 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Full report</p>
-              <pre className="mt-3 max-h-[360px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-slate-300">
-                {analysis?.report || 'A longer judge-ready report will be generated here after analysis.'}
-              </pre>
+          </div>
+        </header>
+
+        <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+          <Panel>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-red-600/20 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-red-700">
+                  <FlaskConical size={14} /> Analyze
+                </div>
+                <h2 className="mt-3 text-2xl font-black">Current contract</h2>
+                <p className="mt-1 text-sm text-black/60">
+                  Paste a GenLayer contract and the tool will score it, extract the public surface, and build a deploy note.
+                </p>
+              </div>
+              <div className="rounded-[18px] border border-black/10 bg-black px-4 py-3 text-white">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">Score</p>
+                <p className={`mt-1 text-4xl font-black ${scoreAccent}`}>{analysis.score}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4">
+              <div className="grid gap-2 md:grid-cols-[0.55fr_0.45fr]">
+                <label className="grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Project name</span>
+                  <input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
+                    placeholder="ProvenanceRegistry"
+                  />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Comparison label</span>
+                  <input
+                    value="Legacy comparison"
+                    readOnly
+                    className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-black/60 outline-none"
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Contract source</span>
+                <textarea
+                  value={source}
+                  onChange={e => setSource(e.target.value)}
+                  className="min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 outline-none transition focus:border-red-600"
+                  spellCheck={false}
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-3">
+                <ActionButton onClick={runAnalysis} disabled={busy} className="bg-black text-white hover:bg-black/90">
+                  {busy ? <RefreshCcw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  {busy ? 'Analyzing' : 'Analyze contract'}
+                </ActionButton>
+                <ActionButton onClick={runCompare} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <GitCompare size={16} /> Compare versions
+                </ActionButton>
+                <ActionButton onClick={loadPrimarySample} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <ClipboardCopy size={16} /> Load sample
+                </ActionButton>
+                <ActionButton onClick={loadAutomationSample} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Bot size={16} /> Load automation sample
+                </ActionButton>
+                <ActionButton onClick={() => copyText('deploy', deployPack)} className="border border-red-600/20 bg-red-600 text-white hover:bg-red-700">
+                  <Copy size={16} /> {copyStatus.deploy === 'copied' ? 'Deploy pack copied' : 'Copy deploy pack'}
+                </ActionButton>
+                <ActionButton onClick={() => copyText('submission', submissionPack)} className="border border-red-600/20 bg-red-50 text-red-700 hover:bg-red-100">
+                  <Download size={16} /> {copyStatus.submission === 'copied' ? 'Submission copied' : 'Copy submission pack'}
+                </ActionButton>
+              </div>
+            </div>
+          </Panel>
+
+          <div className="grid gap-4">
+            <Panel>
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Readiness snapshot</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Metric label="Verdict" value={analysis.verdict} hint="GenLayer review status" />
+                <Metric label="Methods" value={String(methodCount)} hint="Public reads and writes" />
+                <Metric label="Contract classes" value={analysis.contractNames[0] || 'none'} hint="Detected entry point" />
+                <Metric label="Blueprint tags" value={String(analysis.blueprintTags.length)} hint="Build-oriented signals" />
+              </div>
+              <p className="mt-4 rounded-[16px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
+                {analysis.summary}
+              </p>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <TriangleAlert size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Findings</h3>
+              </div>
+              <div className="mt-4 space-y-3">
+                {analysis.findings.length ? (
+                  analysis.findings.map(finding => (
+                    <div key={`${finding.category}-${finding.title}`} className="rounded-[18px] border border-black/10 bg-white p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${
+                            finding.level === 'error'
+                              ? 'bg-red-600 text-white'
+                              : finding.level === 'warn'
+                                ? 'bg-black text-white'
+                                : 'bg-black/10 text-black'
+                          }`}
+                        >
+                          {finding.level}
+                        </span>
+                        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-black/45">{finding.category}</span>
+                      </div>
+                      <p className="mt-3 font-bold">{finding.title}</p>
+                      <p className="mt-2 text-sm text-black/70">{finding.detail}</p>
+                      <p className="mt-2 text-sm text-red-700">Fix: {finding.fix}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/65">
+                    No findings yet. Run analysis to populate the review.
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Compare mode</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Metric label="Score delta" value={`${diff.scoreDelta >= 0 ? '+' : ''}${diff.scoreDelta}`} hint="Current vs previous" />
+                <Metric label="Risk delta" value={`${diff.riskDelta >= 0 ? '+' : ''}${diff.riskDelta}`} hint="Error findings change" />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Current source</p>
+                  <textarea
+                    value={compareSource}
+                    onChange={e => setCompareSource(e.target.value)}
+                    className="mt-3 min-h-[220px] w-full rounded-[16px] border border-black/15 bg-white p-3 font-mono text-[12px] outline-none focus:border-red-600"
+                    spellCheck={false}
+                  />
+                </div>
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Diff report</p>
+                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">
+                    {diff.report}
+                  </pre>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton onClick={() => copyText('compare', diff.report)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Copy size={16} /> {copyStatus.compare === 'copied' ? 'Diff copied' : 'Copy diff report'}
+                </ActionButton>
+              </div>
+            </Panel>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Layers3 size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Practical modules</h3>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {[
+                {
+                  title: 'Provenance registry',
+                  detail: 'Log a source-backed event, preserve the latest result, and expose a stable read path for review.',
+                },
+                {
+                  title: 'Policy router',
+                  detail: 'Attach policies to targets and keep the mapping visible through a public view.',
+                },
+                {
+                  title: 'Automation guard',
+                  detail: 'Wrap LLM reasoning in the consensus path and keep writes deterministic.',
+                },
+                {
+                  title: 'Submission pack',
+                  detail: 'Turn a contract into a judge-friendly summary with notes, tags, and next steps.',
+                },
+              ].map(item => (
+                <div key={item.title} className="rounded-[18px] border border-black/10 bg-white p-4">
+                  <div className="flex items-center gap-2">
+                    <BadgeCheck size={16} className="text-red-700" />
+                    <p className="font-bold">{item.title}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-black/70">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <div className="grid gap-4">
+            <Panel>
+              <div className="flex items-center gap-2">
+                <Code2 size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Deploy kit</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Metric label="Network" value={String(forgeDeployment.network || 'studionet')} />
+                <Metric label="Contract" value={String(forgeDeployment.contract || 'ContractForgeRegistry')} />
+                <Metric label="Address" value={String(forgeDeployment.address || 'pending')} hint="Studionet deployment" />
+                <Metric label="Tx hash" value={String(forgeDeployment.tx || 'pending')} hint="Deployment transaction" />
+              </div>
+              <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Command</p>
+                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">
+{`genlayer network studionet
+genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}
+                </pre>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton
+                  onClick={() => copyText('command', `genlayer network studionet\ngenlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`)}
+                  className="border border-black/15 bg-white text-black hover:bg-black/5"
+                >
+                  <ClipboardCopy size={16} /> {copyStatus.command === 'copied' ? 'Command copied' : 'Copy deploy command'}
+                </ActionButton>
+                <ActionButton
+                  onClick={() => copyText('address', `${forgeDeployment.address || 'pending'}\n${forgeDeployment.tx || 'pending'}`)}
+                  className="bg-red-600 text-white hover:bg-red-700"
+                >
+                  <ArrowUpRight size={16} /> Copy chain refs
+                </ActionButton>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <MoveRight size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Judge-ready notes</h3>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Submission pack</p>
+                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{submissionPack}</pre>
+                </div>
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Deploy pack</p>
+                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{deployPack}</pre>
+                </div>
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Forge brief</p>
+                  <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{brief.report}</pre>
+                </div>
+              </div>
+            </Panel>
+          </div>
+        </div>
+
+        <section className="mt-4 grid gap-4 xl:grid-cols-3">
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Sparkles size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Contract profile</h3>
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Detected classes</p>
+                <p className="mt-2 text-sm text-black/80">{analysis.contractNames.length ? analysis.contractNames.join(', ') : 'none detected'}</p>
+              </div>
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Public views</p>
+                <p className="mt-2 text-sm text-black/80">{analysis.publicViews.length ? analysis.publicViews.join(', ') : 'none detected'}</p>
+              </div>
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Public writes</p>
+                <p className="mt-2 text-sm text-black/80">{analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'none detected'}</p>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Bot size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Blueprint tags</h3>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {clampTagList(analysis.blueprintTags).map(tag => (
+                <span key={tag} className="rounded-full border border-black/10 bg-black px-3 py-1.5 text-xs font-semibold text-white">
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <p className="mt-4 text-sm text-black/65">
+              The analyzer is tuned for GenLayer builders: it checks deterministic structure, public surface quality, tests, deployment readiness, and security signals.
+            </p>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <MoveRight size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Next steps</h3>
+            </div>
+            <div className="mt-4 space-y-2">
+              {analysis.nextSteps.length ? (
+                analysis.nextSteps.map(step => (
+                  <div key={step} className="rounded-[18px] border border-black/10 bg-white p-3 text-sm text-black/75">
+                    {step}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-3 text-sm text-black/65">
+                  No immediate changes required.
+                </div>
+              )}
             </div>
           </Panel>
         </section>
 
-        <section className="mt-5 grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-          <Panel>
-            <div className="flex items-center gap-2">
-              <Layers3 className="text-cyan-300" size={18} />
-              <h3 className="text-xl font-black">Deploy Kit</h3>
-            </div>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Contract</p>
-                <p className="mt-2 text-white">{forgeDeployment.contract || 'ContractForgeRegistry'}</p>
-              </div>
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Network</p>
-                <p className="mt-2 text-white">{forgeDeployment.network || 'studionet'}</p>
-              </div>
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Deploy command</p>
-                <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[12px] text-cyan-200">{`genlayer network studionet\ngenlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}</pre>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="text-emerald-300" size={18} />
-              <h3 className="text-xl font-black">On-chain Snapshot</h3>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Address</p>
-                <p className="mt-2 break-all text-sm text-white">{forgeDeployment.address || 'Pending deployment'}</p>
-              </div>
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Tx hash</p>
-                <p className="mt-2 break-all text-sm text-white">{forgeDeployment.tx || 'Pending deployment'}</p>
-              </div>
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Read methods</p>
-                <p className="mt-2 text-sm text-white">project, stats, latest_record</p>
-              </div>
-              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Write method</p>
-                <p className="mt-2 text-sm text-white">register_analysis</p>
-              </div>
-            </div>
-          </Panel>
-        </section>
+        <footer className="pb-5 pt-4 text-center text-xs text-black/45">
+          Built for GenLayer Studio, with on-chain registry support and judge-ready output packs.
+        </footer>
       </div>
     </main>
   );

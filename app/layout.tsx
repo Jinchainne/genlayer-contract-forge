@@ -2,8 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'GenLayer Contract Forge',
-  description: 'A deep GenLayer builder tool for contract readiness analysis, anti-pattern detection, and deployment planning.',
+  title: 'GenLayer Studio Contract Forge',
+  description: 'A GenLayer-only builder workspace for contract review, comparison, deployment packs, and submission notes.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -31,6 +31,19 @@ export type AnalysisResult = {
   blueprintTags: string[];
 };
 
+export type DiffResult = {
+  scoreDelta: number;
+  currentVerdict: string;
+  previousVerdict: string;
+  addedMethods: string[];
+  removedMethods: string[];
+  addedTags: string[];
+  removedTags: string[];
+  riskDelta: number;
+  summary: string;
+  report: string;
+};
+
 const ruleHit = (source: string, patterns: RegExp[]) => patterns.some(pattern => pattern.test(source));
 
 function countMatches(source: string, patterns: RegExp[]) {
@@ -52,9 +65,12 @@ function extractNames(source: string, pattern: RegExp) {
   return Array.from(source.matchAll(pattern)).map(match => match[1]).filter(Boolean);
 }
 
+function unique(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 export function analyzeGenLayerContract(source: string, title = 'Untitled Contract'): AnalysisResult {
   const text = String(source || '');
-  const lines = text.split(/\r?\n/);
   const hasDepends = /Depends"\s*:\s*"py-genlayer:/.test(text);
   const hasContractClass = /class\s+\w+\s*\(\s*gl\.Contract\s*\)/.test(text);
   const hasPublicView = /@gl\.public\.view/.test(text);
@@ -67,18 +83,8 @@ export function analyzeGenLayerContract(source: string, title = 'Untitled Contra
   const hasDeployHint = /genlayer deploy|deployScript|Studionet|studio\.genlayer\.com/.test(text);
   const hasReadmeDocs = /README|docs\//.test(text);
   const contractNames = extractNames(text, /class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*gl\.Contract\s*\)/g);
-  const publicViews = lines.flatMap((line, index) => {
-    if (!line.includes('@gl.public.view')) return [];
-    const next = lines[index + 1] || '';
-    const match = next.match(/def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    return match ? [match[1]] : [];
-  });
-  const publicWrites = lines.flatMap((line, index) => {
-    if (!line.includes('@gl.public.write')) return [];
-    const next = lines[index + 1] || '';
-    const match = next.match(/def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    return match ? [match[1]] : [];
-  });
+  const publicViews = parseMethodNames(text, '@gl.public.view');
+  const publicWrites = parseMethodNames(text, '@gl.public.write');
   const antiPatterns = [
     /import\s+random/,
     /time\.sleep/,
@@ -209,4 +215,106 @@ export function generateForgeBrief(source: string, title: string) {
   ].join('\n\n');
 
   return { analysis, report };
+}
+
+export function createDeployPack(analysis: AnalysisResult, title: string, address?: string, tx?: string) {
+  const deployCommand = [
+    'genlayer network studionet',
+    'genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api',
+  ].join('\n');
+
+  return [
+    `# Deploy Pack: ${title}`,
+    '',
+    `Contract: ${analysis.contractNames[0] || 'ContractForgeRegistry'}`,
+    `Score: ${analysis.score}/100`,
+    `Verdict: ${analysis.verdict}`,
+    `Address: ${address || 'pending'}`,
+    `Tx: ${tx || 'pending'}`,
+    '',
+    '## Deploy',
+    deployCommand,
+    '',
+    '## Read Methods',
+    analysis.publicViews.length ? analysis.publicViews.join(', ') : 'project, stats, latest_record',
+    '',
+    '## Write Methods',
+    analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'register_analysis',
+    '',
+    '## Judge Snapshot',
+    analysis.findings.length ? analysis.findings.map(f => `- [${f.level}] ${f.title}`).join('\n') : '- No major findings',
+  ].join('\n');
+}
+
+export function createSubmissionPack(analysis: AnalysisResult, title: string) {
+  return [
+    `# Submission Pack: ${title}`,
+    '',
+    `- Readiness score: ${analysis.score}/100`,
+    `- Verdict: ${analysis.verdict}`,
+    `- Contract classes: ${analysis.contractNames.length ? analysis.contractNames.join(', ') : 'none detected'}`,
+    `- Public views: ${analysis.publicViews.length ? analysis.publicViews.join(', ') : 'none detected'}`,
+    `- Public writes: ${analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'none detected'}`,
+    `- Tags: ${analysis.blueprintTags.length ? analysis.blueprintTags.join(', ') : 'none detected'}`,
+    '',
+    '## One-line description',
+    `GenLayer Contract Forge is a builder tool for preflighting intelligent contracts before deployment.`,
+    '',
+    '## Short notes',
+    analysis.nextSteps.length ? analysis.nextSteps.map(step => `- ${step}`).join('\n') : '- No immediate changes required.',
+  ].join('\n');
+}
+
+function parseMethodNames(source: string, annotation: '@gl.public.view' | '@gl.public.write') {
+  const lines = source.split(/\r?\n/);
+  return unique(lines.flatMap((line, index) => {
+    if (!line.includes(annotation)) return [];
+    const next = lines[index + 1] || '';
+    const match = next.match(/def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    return match ? [match[1]] : [];
+  }));
+}
+
+export function compareGenLayerContracts(currentSource: string, previousSource: string, currentTitle = 'Current Contract', previousTitle = 'Previous Contract'): DiffResult {
+  const current = analyzeGenLayerContract(currentSource, currentTitle);
+  const previous = analyzeGenLayerContract(previousSource, previousTitle);
+  const currentMethods = unique([...current.publicViews, ...current.publicWrites]);
+  const previousMethods = unique([...previous.publicViews, ...previous.publicWrites]);
+  const addedMethods = currentMethods.filter(method => !previousMethods.includes(method));
+  const removedMethods = previousMethods.filter(method => !currentMethods.includes(method));
+  const addedTags = current.blueprintTags.filter(tag => !previous.blueprintTags.includes(tag));
+  const removedTags = previous.blueprintTags.filter(tag => !current.blueprintTags.includes(tag));
+  const riskDelta = current.findings.filter(f => f.level === 'error').length - previous.findings.filter(f => f.level === 'error').length;
+  const scoreDelta = current.score - previous.score;
+  const summary = `Score changed by ${scoreDelta >= 0 ? '+' : ''}${scoreDelta}. ${addedMethods.length ? `Added: ${addedMethods.join(', ')}.` : 'No new methods added.'} ${removedMethods.length ? `Removed: ${removedMethods.join(', ')}.` : 'No methods removed.'}`;
+
+  const report = [
+    section('Comparison', [
+      `Current score: ${current.score}/100`,
+      `Previous score: ${previous.score}/100`,
+      `Score delta: ${scoreDelta >= 0 ? '+' : ''}${scoreDelta}`,
+      `Risk delta: ${riskDelta >= 0 ? '+' : ''}${riskDelta} error findings`,
+    ]),
+    section('Methods Added', addedMethods.length ? addedMethods : ['None']),
+    section('Methods Removed', removedMethods.length ? removedMethods : ['None']),
+    section('Tags Added', addedTags.length ? addedTags : ['None']),
+    section('Tags Removed', removedTags.length ? removedTags : ['None']),
+    section('Action', [
+      scoreDelta >= 0 ? 'The current version looks safer or more complete.' : 'The current version regressed. Review the changed logic.',
+      addedMethods.length ? 'Keep the new methods and add tests that cover them.' : 'If this was intentional, document why no new API surface was added.',
+    ]),
+  ].join('\n\n');
+
+  return {
+    scoreDelta,
+    currentVerdict: current.verdict,
+    previousVerdict: previous.verdict,
+    addedMethods,
+    removedMethods,
+    addedTags,
+    removedTags,
+    riskDelta,
+    summary,
+    report,
+  };
 }
