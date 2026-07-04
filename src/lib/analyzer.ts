@@ -44,6 +44,13 @@ export type DiffResult = {
   report: string;
 };
 
+export type ReleaseChecklist = {
+  useCase: string;
+  summary: string;
+  items: string[];
+  command: string;
+};
+
 const ruleHit = (source: string, patterns: RegExp[]) => patterns.some(pattern => pattern.test(source));
 
 function countMatches(source: string, patterns: RegExp[]) {
@@ -67,6 +74,39 @@ function extractNames(source: string, pattern: RegExp) {
 
 function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function classifyUseCase(source: string, title: string) {
+  const text = `${title}\n${source}`.toLowerCase();
+  if (/(occupancy|camera|people|count|snapshot)/.test(text)) return 'Occupancy / physical monitoring';
+  if (/(provenance|source_url|evidence|audit trail|history)/.test(text)) return 'Provenance registry';
+  if (/(policy|route|router|rules?)/.test(text)) return 'Policy router';
+  if (/(claim|dispute|resolve|adjudicat|decision)/.test(text)) return 'Dispute resolver';
+  if (/(ledger|signal|event|score|report)/.test(text)) return 'Operational ledger';
+  return 'Operational registry';
+}
+
+export function createReleaseChecklist(analysis: AnalysisResult, title: string, address?: string, tx?: string): ReleaseChecklist {
+  const useCase = classifyUseCase(analysis.skeleton || title, title);
+  const items = [
+    analysis.findings.some(f => f.level === 'error') ? 'Fix every error-level finding before deployment.' : 'No error-level findings detected. Keep the current consensus and safety structure.',
+    analysis.publicViews.length ? `Confirm read methods: ${analysis.publicViews.join(', ')}.` : 'Add at least one public view for reviewer transparency.',
+    analysis.publicWrites.length ? `Confirm write methods: ${analysis.publicWrites.join(', ')}.` : 'Add at least one public write to prove state transitions.',
+    analysis.testPlan.length ? analysis.testPlan[0] : 'Create at least one direct test and one deploy/integration test.',
+    `Deploy to Studionet with ${address ? address : 'the registry address in your deployment bundle'}.`,
+    tx ? `Keep deployment tx ${tx.slice(0, 12)}... in the submission notes.` : 'Record the deployment transaction hash in the handoff notes.',
+    analysis.nextSteps.length ? analysis.nextSteps[0] : 'Document the user-facing purpose and verification steps in README.',
+  ];
+
+  return {
+    useCase,
+    summary: `This contract fits a ${useCase.toLowerCase()} workflow on GenLayer.`,
+    items,
+    command: [
+      'genlayer network studionet',
+      `genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`,
+    ].join('\n'),
+  };
 }
 
 export function analyzeGenLayerContract(source: string, title = 'Untitled Contract'): AnalysisResult {
@@ -247,11 +287,13 @@ export function createDeployPack(analysis: AnalysisResult, title: string, addres
 }
 
 export function createSubmissionPack(analysis: AnalysisResult, title: string) {
+  const release = createReleaseChecklist(analysis, title);
   return [
     `# Submission Pack: ${title}`,
     '',
     `- Readiness score: ${analysis.score}/100`,
     `- Verdict: ${analysis.verdict}`,
+    `- Recommended use case: ${release.useCase}`,
     `- Contract classes: ${analysis.contractNames.length ? analysis.contractNames.join(', ') : 'none detected'}`,
     `- Public views: ${analysis.publicViews.length ? analysis.publicViews.join(', ') : 'none detected'}`,
     `- Public writes: ${analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'none detected'}`,
@@ -262,6 +304,9 @@ export function createSubmissionPack(analysis: AnalysisResult, title: string) {
     '',
     '## Short notes',
     analysis.nextSteps.length ? analysis.nextSteps.map(step => `- ${step}`).join('\n') : '- No immediate changes required.',
+    '',
+    '## Release checklist',
+    release.items.map(step => `- ${step}`).join('\n'),
   ].join('\n');
 }
 

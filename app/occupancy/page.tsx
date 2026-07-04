@@ -17,7 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import occupancyDeployment from '../../contracts/occupancy_deployment.json';
-import { buildOccupancyPacket, buildRegisterCommand, occupancyStatus, type OccupancyDetection, type OccupancySnapshot } from '../../src/lib/occupancy';
+import { buildBridgeGuide, buildOccupancyPacket, buildRegisterCommand, occupancyStatus, type OccupancyDetection, type OccupancySnapshot } from '../../src/lib/occupancy';
 import TopNav from '../components/top-nav';
 
 type SavedSnapshot = OccupancySnapshot & { id: string };
@@ -168,6 +168,7 @@ export default function OccupancyPage() {
 
   const packet = useMemo(() => buildOccupancyPacket(snapshot), [snapshot]);
   const command = useMemo(() => buildRegisterCommand(snapshot, occupancyDeployment.address), [snapshot]);
+  const bridgeGuide = useMemo(() => buildBridgeGuide(sourceLabel, sourceUrl), [sourceLabel, sourceUrl]);
   const occupancy = occupancyStatus(count, threshold);
 
   async function copyText(key: string, value: string) {
@@ -607,6 +608,19 @@ export default function OccupancyPage() {
 
               <div className="rounded-[16px] border border-black/10 bg-black/5 p-4 text-sm text-black/70">
                 {connectionNote}
+              </div>
+
+              <div className="rounded-[18px] border border-black/10 bg-white p-4">
+                <div className="flex items-center gap-2">
+                  <Link2 size={16} className="text-red-700" />
+                  <h3 className="text-base font-black">Bridge guide</h3>
+                </div>
+                <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap rounded-[14px] bg-black/5 p-3 text-[12px] leading-6 text-black/75">{bridgeGuide}</pre>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <ActionButton onClick={() => copyText('bridge-guide', bridgeGuide)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                    <ClipboardCopy size={16} /> {copyState['bridge-guide'] ? 'Guide copied' : 'Copy guide'}
+                  </ActionButton>
+                </div>
               </div>
 
               {error ? <p className="rounded-[16px] border border-red-600/20 bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}

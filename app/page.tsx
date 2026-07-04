@@ -25,6 +25,7 @@ import {
   analyzeGenLayerContract,
   compareGenLayerContracts,
   createDeployPack,
+  createReleaseChecklist,
   createSubmissionPack,
   generateForgeBrief,
   type AnalysisResult,
@@ -284,6 +285,7 @@ export default function Page() {
 
   const deployPack = useMemo(() => createDeployPack(analysis, title, forgeDeployment.address, forgeDeployment.tx), [analysis, title]);
   const submissionPack = useMemo(() => createSubmissionPack(analysis, title), [analysis, title]);
+  const releaseChecklist = useMemo(() => createReleaseChecklist(analysis, title, forgeDeployment.address, forgeDeployment.tx), [analysis, title]);
   const brief = useMemo(() => generateForgeBrief(source, title), [source, title]);
   const methodCount = analysis.publicViews.length + analysis.publicWrites.length;
   const findingCount = analysis.findings.length;
@@ -677,6 +679,51 @@ export default function Page() {
             </Panel>
           </div>
         </div>
+
+        <section className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Bot size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Recommended use case</h3>
+            </div>
+            <p className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
+              {releaseChecklist.summary}
+            </p>
+            <div className="mt-4 space-y-3">
+              {releaseChecklist.items.map(item => (
+                <div key={item} className="rounded-[18px] border border-black/10 bg-white p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-600 text-xs font-black text-white">
+                      ✓
+                    </span>
+                    <p className="text-sm text-black/75">{item}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Release checklist</h3>
+            </div>
+            <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Deploy command</p>
+              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{releaseChecklist.command}</pre>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {analysis.testPlan.map(step => (
+                <div key={step} className="rounded-[18px] border border-black/10 bg-white p-4 text-sm text-black/75">
+                  {step}
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/70">
+              Use this tab as a GenLayer handoff surface: review the score, fix the findings, deploy to Studionet, then paste the submission pack into the hackathon form.
+            </div>
+          </Panel>
+        </section>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
           <Panel>

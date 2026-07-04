@@ -11,6 +11,7 @@ The app is intentionally focused on GenLayer only. It is not a trading dashboard
 - Analyzes a GenLayer contract for deterministic structure, public surface quality, testing readiness, deployment clarity, and safety signals.
 - Extracts a contract profile with detected classes, public views, public writes, and blueprint tags.
 - Produces a judge-friendly report, a starter skeleton, and a test plan.
+- Suggests the most likely GenLayer use case and a release checklist before deployment.
 - Compares two contract versions and highlights score, method, and risk changes.
 - Generates a deployment pack and a submission pack you can paste into a repo, PR, or hackathon form.
 - Saves drafts locally so you can reopen work across sessions.
@@ -82,11 +83,11 @@ This tool is meant to help builders move from a rough idea to a reviewable GenLa
 
 ### Occupancy AI Desk
 
-- Counts people from a live webcam feed
+- Counts people from a live webcam feed or a camera bridge URL
 - Draws bounding boxes around detected people
 - Keeps a snapshot history in local storage
 - Builds a GenLayer command for writing occupancy state to the registry
-- Supports webcam input plus bridge URLs for LAN, RTSP, ONVIF, and vendor camera snapshots
+- Generates a bridge guide for webcam, LAN, RTSP, ONVIF, and vendor camera snapshots
 
 ## On-Chain Registry
 

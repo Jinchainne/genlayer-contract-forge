@@ -59,3 +59,22 @@ export function buildRegisterCommand(snapshot: OccupancySnapshot, registryAddres
     `  --timestamp "${snapshot.timestamp}"`,
   ].join('\n');
 }
+
+export function buildBridgeGuide(sourceName: string, sourceUrl: string) {
+  return [
+    '# Occupancy Camera Bridge',
+    '',
+    `Source: ${sourceName}`,
+    `Snapshot URL: ${sourceUrl || '<camera-bridge-url>'}`,
+    '',
+    '## Recommended setup',
+    '- For webcam: use the browser directly.',
+    '- For RTSP / ONVIF / vendor cloud cameras: expose a local JPEG snapshot endpoint through a small bridge.',
+    '- Keep the bridge on the same LAN as the camera for lower latency and simpler auth.',
+    '',
+    '## Expected behavior',
+    '- The bridge should return a single current frame.',
+    '- The app will poll that frame, draw boxes, and create a GenLayer snapshot packet.',
+    '- Use the packet or register command as the handoff artifact.',
+  ].join('\n');
+}
