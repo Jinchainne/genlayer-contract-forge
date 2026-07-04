@@ -1,0 +1,8 @@
+{
+  "network": "studionet",
+  "contract": "ContractForgeRegistry",
+  "address": "0x3Fd8285D7188aE2A81e740c36D0cf7B23eE42Ed0",
+  "tx": "0x1c08c17d36fa3b55ac900d901407c56635bad56d24c894acf86735af6a12134b",
+  "rpc": "https://studio.genlayer.com/api",
+  "project": "GenLayer Contract Forge"
+}

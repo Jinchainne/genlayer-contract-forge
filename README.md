@@ -60,6 +60,16 @@ The tool returns:
 - generated skeleton
 - generated test plan
 
+## On-Chain Registry
+
+The Forge tool has a deployed GenLayer registry contract on Studionet:
+
+- Contract: `ContractForgeRegistry`
+- Address: `0x3Fd8285D7188aE2A81e740c36D0cf7B23eE42Ed0`
+- Deployment tx: `0x1c08c17d36fa3b55ac900d901407c56635bad56d24c894acf86735af6a12134b`
+
+The first bootstrap record has already been written to the chain with a success snapshot, so the deployed contract is not empty.
+
 ## Run Locally
 
 ```bash
@@ -71,6 +81,12 @@ Production build:
 
 ```bash
 npm run build
+```
+
+Verification:
+
+```bash
+npm run verify:contract
 ```
 
 ## Project Structure

@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy, FlaskConical, Layers3, RefreshCcw, ShieldCheck, Sparkles, WandSparkles } from 'lucide-react';
+import forgeDeployment from '../contracts/deployment.json';
 
 type Finding = {
   level: 'info' | 'warn' | 'error';
@@ -301,6 +302,54 @@ export default function Page() {
               <pre className="mt-3 max-h-[360px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-slate-300">
                 {analysis?.report || 'A longer judge-ready report will be generated here after analysis.'}
               </pre>
+            </div>
+          </Panel>
+        </section>
+
+        <section className="mt-5 grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Layers3 className="text-cyan-300" size={18} />
+              <h3 className="text-xl font-black">Deploy Kit</h3>
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Contract</p>
+                <p className="mt-2 text-white">{forgeDeployment.contract || 'ContractForgeRegistry'}</p>
+              </div>
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Network</p>
+                <p className="mt-2 text-white">{forgeDeployment.network || 'studionet'}</p>
+              </div>
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Deploy command</p>
+                <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[12px] text-cyan-200">{`genlayer network studionet\ngenlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}</pre>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="text-emerald-300" size={18} />
+              <h3 className="text-xl font-black">On-chain Snapshot</h3>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Address</p>
+                <p className="mt-2 break-all text-sm text-white">{forgeDeployment.address || 'Pending deployment'}</p>
+              </div>
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Tx hash</p>
+                <p className="mt-2 break-all text-sm text-white">{forgeDeployment.tx || 'Pending deployment'}</p>
+              </div>
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Read methods</p>
+                <p className="mt-2 text-sm text-white">project, stats, latest_record</p>
+              </div>
+              <div className="rounded-2xl border border-forge-line bg-forge-panel2 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-forge-muted">Write method</p>
+                <p className="mt-2 text-sm text-white">register_analysis</p>
+              </div>
             </div>
           </Panel>
         </section>

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify:contract": "node scripts/verify-contract.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
