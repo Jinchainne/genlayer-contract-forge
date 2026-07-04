@@ -12,8 +12,11 @@ import {
   Globe,
   Link2,
   Play,
+  Plus,
   ShieldCheck,
   Square,
+  Trash2,
+  MapPinned,
   Users,
 } from 'lucide-react';
 import occupancyDeployment from '../../contracts/occupancy_deployment.json';
@@ -23,8 +26,19 @@ import TopNav from '../components/top-nav';
 type SavedSnapshot = OccupancySnapshot & { id: string };
 type CameraMode = 'webcam' | 'snapshot' | 'bridge';
 type ConnectionState = 'idle' | 'testing' | 'ready' | 'error';
+type RegionMode = 'full' | 'upper' | 'lower';
+type StationProfile = {
+  id: string;
+  label: string;
+  mode: CameraMode;
+  sourceUrl: string;
+  location: string;
+  threshold: number;
+  region: RegionMode;
+};
 
 const STORAGE_KEY = 'genlayer-occupancy-desk:v1';
+const DEFAULT_STATION_ID = 'default-station';
 
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
@@ -55,6 +69,19 @@ function Metric({ label, value, hint }: { label: string; value: string; hint?: s
   );
 }
 
+function regionLabel(region: RegionMode) {
+  if (region === 'upper') return 'Upper zone';
+  if (region === 'lower') return 'Lower zone';
+  return 'Full frame';
+}
+
+function isDetectionInRegion(box: [number, number, number, number], region: RegionMode, frameHeight: number) {
+  if (region === 'full') return true;
+  const centerY = box[1] + box[3] / 2;
+  if (region === 'upper') return centerY <= frameHeight / 2;
+  return centerY >= frameHeight / 2;
+}
+
 export default function OccupancyPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteImageRef = useRef<HTMLImageElement | null>(null);
@@ -66,7 +93,6 @@ export default function OccupancyPage() {
   const activeRef = useRef(false);
   const loopRef = useRef<number | null>(null);
   const loopKindRef = useRef<'raf' | 'timeout' | null>(null);
-  const remoteFrameRef = useRef(0);
 
   const [loadingModel, setLoadingModel] = useState(true);
   const [cameraOn, setCameraOn] = useState(false);
@@ -76,6 +102,9 @@ export default function OccupancyPage() {
   const [sourceLabel, setSourceLabel] = useState('Lobby Camera');
   const [location, setLocation] = useState('Main entrance');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [regionMode, setRegionMode] = useState<RegionMode>('full');
+  const [stations, setStations] = useState<StationProfile[]>([]);
+  const [selectedStationId, setSelectedStationId] = useState(DEFAULT_STATION_ID);
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionNote, setConnectionNote] = useState('Use your webcam or paste an HTTP bridge URL for a LAN / AI camera.');
   const [count, setCount] = useState(0);
@@ -91,13 +120,26 @@ export default function OccupancyPage() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { history?: SavedSnapshot[]; cameraMode?: CameraMode; sourceUrl?: string; sourceLabel?: string; location?: string; threshold?: number };
+      const parsed = JSON.parse(raw) as {
+        history?: SavedSnapshot[];
+        cameraMode?: CameraMode;
+        sourceUrl?: string;
+        sourceLabel?: string;
+        location?: string;
+        threshold?: number;
+        regionMode?: RegionMode;
+        stations?: StationProfile[];
+        selectedStationId?: string;
+      };
       if (Array.isArray(parsed.history)) setHistory(parsed.history);
       if (parsed.cameraMode) setCameraMode(parsed.cameraMode);
       if (parsed.sourceUrl) setSourceUrl(parsed.sourceUrl);
       if (parsed.sourceLabel) setSourceLabel(parsed.sourceLabel);
       if (parsed.location) setLocation(parsed.location);
       if (typeof parsed.threshold === 'number') setThreshold(parsed.threshold);
+      if (parsed.regionMode) setRegionMode(parsed.regionMode);
+      if (Array.isArray(parsed.stations)) setStations(parsed.stations);
+      if (parsed.selectedStationId) setSelectedStationId(parsed.selectedStationId);
     } catch {
       // ignore broken local state
     }
@@ -105,8 +147,21 @@ export default function OccupancyPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, cameraMode, sourceUrl, sourceLabel, location, threshold }));
-  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold]);
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        history,
+        cameraMode,
+        sourceUrl,
+        sourceLabel,
+        location,
+        threshold,
+        regionMode,
+        stations,
+        selectedStationId,
+      }),
+    );
+  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, regionMode, stations, selectedStationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +199,30 @@ export default function OccupancyPage() {
   }, [cameraOn]);
 
   useEffect(() => {
+    if (stations.length > 0) return;
+    setStations([
+      {
+        id: DEFAULT_STATION_ID,
+        label: sourceLabel,
+        mode: cameraMode,
+        sourceUrl,
+        location,
+        threshold,
+        region: regionMode,
+      },
+    ]);
+    setSelectedStationId(DEFAULT_STATION_ID);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!stations.length) return;
+    const current = stations.find(station => station.id === selectedStationId) || stations[0];
+    if (!current) return;
+    if (current.id !== selectedStationId) setSelectedStationId(current.id);
+  }, [stations, selectedStationId]);
+
+  useEffect(() => {
     return () => {
       stopSource();
     };
@@ -157,6 +236,7 @@ export default function OccupancyPage() {
       title: 'Occupancy Snapshot',
       location,
       cameraName: sourceLabel,
+      region: regionLabel(regionMode),
       count,
       threshold,
       avgScore,
@@ -164,7 +244,7 @@ export default function OccupancyPage() {
       timestamp,
       labels: detections.map((d, index) => `${index + 1}. ${d.class} ${Math.round(d.score * 100)}%`).slice(0, 8),
     } satisfies OccupancySnapshot;
-  }, [avgScore, count, detections, location, sourceLabel, threshold]);
+  }, [avgScore, count, detections, location, regionMode, sourceLabel, threshold]);
 
   const packet = useMemo(() => buildOccupancyPacket(snapshot), [snapshot]);
   const command = useMemo(() => buildRegisterCommand(snapshot, occupancyDeployment.address), [snapshot]);
@@ -175,6 +255,54 @@ export default function OccupancyPage() {
     await navigator.clipboard.writeText(value);
     setCopyState(prev => ({ ...prev, [key]: true }));
     window.setTimeout(() => setCopyState(prev => ({ ...prev, [key]: false })), 1200);
+  }
+
+  function makeStationProfile(id = selectedStationId || crypto.randomUUID()): StationProfile {
+    return {
+      id,
+      label: sourceLabel.trim() || 'Camera station',
+      mode: cameraMode,
+      sourceUrl: sourceUrl.trim(),
+      location: location.trim() || 'Unspecified location',
+      threshold,
+      region: regionMode,
+    };
+  }
+
+  function applyStation(station: StationProfile) {
+    stopSource();
+    setSelectedStationId(station.id);
+    setSourceLabel(station.label);
+    setCameraMode(station.mode);
+    setSourceUrl(station.sourceUrl);
+    setLocation(station.location);
+    setThreshold(station.threshold);
+    setRegionMode(station.region);
+    setConnectionState('idle');
+    setConnectionNote(
+      station.mode === 'webcam'
+        ? 'Use the local webcam on this device.'
+        : 'Paste the HTTP snapshot or bridge URL from your camera gateway.',
+    );
+  }
+
+  function saveStation() {
+    const station = makeStationProfile();
+    setSelectedStationId(station.id);
+    setStations(prev => [station, ...prev.filter(item => item.id !== station.id)].slice(0, 12));
+  }
+
+  function createStationFromCurrent() {
+    const station = makeStationProfile(crypto.randomUUID());
+    setSelectedStationId(station.id);
+    setStations(prev => [station, ...prev].slice(0, 12));
+  }
+
+  function removeStation(id: string) {
+    setStations(prev => prev.filter(item => item.id !== id));
+    if (selectedStationId === id) {
+      setSelectedStationId(DEFAULT_STATION_ID);
+    }
   }
 
   function scheduleNextLoop() {
@@ -341,7 +469,10 @@ export default function OccupancyPage() {
       canvasRef.current.height = height;
 
       const results = await modelRef.current.detect(input, 20, 0.45);
-      const next = results.filter(result => result.class === 'person' && result.score >= 0.45);
+      const next = results.filter(result => {
+        if (result.class !== 'person' || result.score < 0.45) return false;
+        return isDetectionInRegion(result.bbox, regionMode, height);
+      });
       const nextAvg =
         results.length > 0
           ? results.reduce((total, item) => total + item.score, 0) / results.length
@@ -356,6 +487,15 @@ export default function OccupancyPage() {
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         ctx.lineWidth = 3;
         ctx.font = '18px Segoe UI, Arial, sans-serif';
+        if (regionMode !== 'full') {
+          ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+          ctx.setLineDash([14, 10]);
+          ctx.beginPath();
+          ctx.moveTo(0, height / 2);
+          ctx.lineTo(width, height / 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
         results.forEach((result, index) => {
           const [x, y, width, height] = result.bbox;
           const isPerson = result.class === 'person';
@@ -467,6 +607,96 @@ export default function OccupancyPage() {
                     className="rounded-[16px] border border-black/15 bg-white px-4 py-3 outline-none transition focus:border-red-600"
                   />
                 </label>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                <label className="grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Zone focus</span>
+                  <div className="grid grid-cols-3 gap-2 rounded-[18px] border border-black/10 bg-black/5 p-2">
+                    {(['full', 'upper', 'lower'] as const).map(option => {
+                      const active = regionMode === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setRegionMode(option)}
+                          className={`rounded-full px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] transition ${
+                            active ? 'bg-red-600 text-white' : 'bg-white text-black hover:bg-black/5'
+                          }`}
+                        >
+                          {option === 'full' ? 'Full frame' : option === 'upper' ? 'Upper half' : 'Lower half'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+                <div className="grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/55">Active zone</span>
+                  <div className="rounded-[16px] border border-black/15 bg-black/5 px-4 py-3 text-sm font-bold">{regionLabel(regionMode)}</div>
+                </div>
+              </div>
+
+              <div className="rounded-[18px] border border-black/10 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <MapPinned size={16} className="text-red-700" />
+                    <h3 className="text-base font-black">Camera stations</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <ActionButton onClick={createStationFromCurrent} className="border border-black/15 bg-white px-3 py-2 text-xs text-black hover:bg-black/5">
+                      <Plus size={14} /> New station
+                    </ActionButton>
+                    <ActionButton onClick={saveStation} className="border border-red-600/20 bg-red-600 px-3 py-2 text-xs text-white hover:bg-red-700">
+                      <ShieldCheck size={14} /> Save station
+                    </ActionButton>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3">
+                  {stations.length ? (
+                    stations.map(station => {
+                      const active = station.id === selectedStationId;
+                      return (
+                        <div
+                          key={station.id}
+                          className={`rounded-[18px] border p-4 ${active ? 'border-red-600 bg-red-50' : 'border-black/10 bg-black/5'}`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => applyStation(station)}
+                              className="text-left"
+                            >
+                              <p className="font-bold">{station.label}</p>
+                              <p className="mt-1 text-xs text-black/55">
+                                {station.mode === 'webcam' ? 'Webcam' : station.mode === 'snapshot' ? 'Snapshot bridge' : 'LAN / RTSP / ONVIF'} · {station.location} · {regionLabel(station.region)}
+                              </p>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeStation(station.id)}
+                              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 hover:bg-black/5"
+                            >
+                              <Trash2 size={14} /> Remove
+                            </button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-black/70">
+                              Threshold {station.threshold}
+                            </span>
+                            <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-black/70">
+                              {station.sourceUrl ? 'Bridge connected' : 'No bridge URL'}
+                            </span>
+                            {active ? <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white">Active</span> : null}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/65">
+                      No saved stations yet. Save one to reuse the same camera, zone, and threshold later.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-[18px] border border-black/10 bg-black/5 p-3">
@@ -638,6 +868,7 @@ export default function OccupancyPage() {
                 <Metric label="Average score" value={`${Math.round(avgScore * 100)}%`} hint="Model confidence" />
                 <Metric label="Alert level" value={occupancy.level} hint="Threshold state" />
                 <Metric label="Camera" value={sourceLabel} hint={location} />
+                <Metric label="Zone" value={regionLabel(regionMode)} hint="Counting region" />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Metric label="Registry" value={occupancyDeployment.contract} hint={occupancyDeployment.address} />

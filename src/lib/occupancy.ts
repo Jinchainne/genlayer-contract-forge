@@ -8,6 +8,7 @@ export type OccupancySnapshot = {
   title: string;
   location: string;
   cameraName: string;
+  region?: string;
   count: number;
   threshold: number;
   avgScore: number;
@@ -31,6 +32,7 @@ export function buildOccupancyPacket(snapshot: OccupancySnapshot) {
     `# Occupancy Snapshot: ${snapshot.title}`,
     '',
     `Camera: ${snapshot.cameraName}`,
+    snapshot.region ? `Region: ${snapshot.region}` : null,
     `Location: ${snapshot.location}`,
     `Timestamp: ${snapshot.timestamp}`,
     `People count: ${snapshot.count}`,
@@ -50,6 +52,7 @@ export function buildRegisterCommand(snapshot: OccupancySnapshot, registryAddres
   return [
     `genlayer call ${registryAddress} register_snapshot \\`,
     `  --camera-name "${snapshot.cameraName.replace(/"/g, '\\"')}" \\`,
+    snapshot.region ? `  --region "${snapshot.region.replace(/"/g, '\\"')}" \\` : null,
     `  --location "${snapshot.location.replace(/"/g, '\\"')}" \\`,
     `  --title "${snapshot.title.replace(/"/g, '\\"')}" \\`,
     `  --count ${snapshot.count} \\`,
@@ -57,7 +60,9 @@ export function buildRegisterCommand(snapshot: OccupancySnapshot, registryAddres
     `  --avg-score ${snapshot.avgScore.toFixed(2)} \\`,
     `  --alert-level "${snapshot.alertLevel}" \\`,
     `  --timestamp "${snapshot.timestamp}"`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function buildBridgeGuide(sourceName: string, sourceUrl: string) {
@@ -75,6 +80,7 @@ export function buildBridgeGuide(sourceName: string, sourceUrl: string) {
     '## Expected behavior',
     '- The bridge should return a single current frame.',
     '- The app will poll that frame, draw boxes, and create a GenLayer snapshot packet.',
+    '- If you need people-only or zone-only counting, crop or segment the frame in the bridge before sending it to the app.',
     '- Use the packet or register command as the handoff artifact.',
   ].join('\n');
 }
