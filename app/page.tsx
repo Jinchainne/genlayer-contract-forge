@@ -513,7 +513,7 @@ export default function Page() {
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     onPaste={event => pasteIntoTextField(event, title, setTitle)}
-                    className="relative z-10 rounded-[16px] border border-black/15 bg-white px-4 py-3 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
+                    className="rounded-[16px] border border-black/15 bg-white px-4 py-3 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
                     placeholder="ProvenanceRegistry"
                     autoComplete="off"
                     spellCheck={false}
@@ -585,13 +585,13 @@ export default function Page() {
                   value={source}
                   onChange={e => setSource(e.target.value)}
                   onPaste={event => pasteIntoTextField(event, source, setSource)}
-                  className="relative z-10 min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
+                  className="min-h-[360px] rounded-[20px] border border-black/15 bg-white p-4 font-mono text-[13px] leading-6 text-black caret-black outline-none transition placeholder:text-black/35 focus:border-red-600"
                   placeholder="# Paste a GenLayer contract here"
                   spellCheck={false}
                 />
               </label>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="relative z-20 flex flex-wrap gap-3 pt-1">
                 <ActionButton onClick={runAnalysis} disabled={busy} className="bg-black text-white hover:bg-black/90">
                   {busy ? <RefreshCcw size={16} className="animate-spin" /> : <Sparkles size={16} />}
                   {busy ? 'Analyzing' : 'Analyze contract'}
