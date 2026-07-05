@@ -26,10 +26,26 @@ import TopNav from '../components/top-nav';
 
 type SavedSnapshot = OccupancySnapshot & { id: string };
 type CameraMode = 'webcam' | 'snapshot' | 'bridge';
+type BridgeTransport = 'jpeg-poll' | 'mjpeg-stream';
 type ConnectionState = 'idle' | 'testing' | 'ready' | 'error';
 type RegionMode = 'full' | 'upper' | 'lower';
 type DetectionMode = 'strict' | 'balanced' | 'wide';
 type AutoSnapshotMode = 'off' | '30s' | '60s' | '5m';
+type ZoneRulePreset = 'balanced' | 'entry-heavy' | 'floor-heavy';
+type TrackSide = 'upper' | 'lower' | 'line';
+type TrackedPerson = {
+  id: number;
+  x: number;
+  y: number;
+  side: TrackSide;
+};
+type OpsEvent = {
+  id: string;
+  tone: 'normal' | 'warn' | 'alert';
+  type: 'session' | 'count' | 'snapshot' | 'zone';
+  message: string;
+  timestamp: string;
+};
 type StationProfile = {
   id: string;
   label: string;
@@ -207,6 +223,18 @@ function formatDurationShort(ms: number) {
   return `${seconds}s`;
 }
 
+function detectionCenter(box: [number, number, number, number]) {
+  return {
+    x: box[0] + box[2] / 2,
+    y: box[1] + box[3] / 2,
+  };
+}
+
+function sideForPoint(y: number, lineY: number, tolerance = 18): TrackSide {
+  if (Math.abs(y - lineY) <= tolerance) return 'line';
+  return y < lineY ? 'upper' : 'lower';
+}
+
 export default function OccupancyPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteImageRef = useRef<HTMLImageElement | null>(null);
@@ -218,10 +246,19 @@ export default function OccupancyPage() {
   const activeRef = useRef(false);
   const loopRef = useRef<number | null>(null);
   const loopKindRef = useRef<'raf' | 'timeout' | null>(null);
+  const trackedPeopleRef = useRef<TrackedPerson[]>([]);
+  const nextTrackIdRef = useRef(1);
+  const alertStateRef = useRef<'NORMAL' | 'WATCH' | 'ALERT'>('NORMAL');
+  const upperZoneStateRef = useRef<'NORMAL' | 'WATCH' | 'ALERT'>('NORMAL');
+  const lowerZoneStateRef = useRef<'NORMAL' | 'WATCH' | 'ALERT'>('NORMAL');
   const runtimeRef = useRef({
     cameraMode: 'webcam' as CameraMode,
     sourceUrl: '',
     threshold: 4,
+    upperZoneLimit: 2,
+    lowerZoneLimit: 2,
+    lineRatio: 0.5,
+    bridgeTransport: 'jpeg-poll' as BridgeTransport,
     regionMode: 'full' as RegionMode,
     detectionMode: 'strict' as DetectionMode,
     frameIntervalMs: 900,
@@ -239,8 +276,13 @@ export default function OccupancyPage() {
   const [sourceLabel, setSourceLabel] = useState('Lobby Camera');
   const [location, setLocation] = useState('Main entrance');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [bridgeTransport, setBridgeTransport] = useState<BridgeTransport>('jpeg-poll');
   const [regionMode, setRegionMode] = useState<RegionMode>('full');
   const [detectionMode, setDetectionMode] = useState<DetectionMode>('strict');
+  const [zonePreset, setZonePreset] = useState<ZoneRulePreset>('balanced');
+  const [lineRatio, setLineRatio] = useState(0.5);
+  const [upperZoneLimit, setUpperZoneLimit] = useState(4);
+  const [lowerZoneLimit, setLowerZoneLimit] = useState(4);
   const [frameIntervalMs, setFrameIntervalMs] = useState(900);
   const [autoSnapshotMode, setAutoSnapshotMode] = useState<AutoSnapshotMode>('off');
   const [stations, setStations] = useState<StationProfile[]>([]);
@@ -250,7 +292,12 @@ export default function OccupancyPage() {
   const [count, setCount] = useState(0);
   const [avgScore, setAvgScore] = useState(0);
   const [detections, setDetections] = useState<OccupancyDetection[]>([]);
+  const [entryCount, setEntryCount] = useState(0);
+  const [exitCount, setExitCount] = useState(0);
+  const [upperZoneCount, setUpperZoneCount] = useState(0);
+  const [lowerZoneCount, setLowerZoneCount] = useState(0);
   const [history, setHistory] = useState<SavedSnapshot[]>([]);
+  const [opsEvents, setOpsEvents] = useState<OpsEvent[]>([]);
   const [copyState, setCopyState] = useState<Record<string, boolean>>({});
   const [lastPacket, setLastPacket] = useState('');
   const [sessionStartedAt, setSessionStartedAt] = useState('');
@@ -273,6 +320,11 @@ export default function OccupancyPage() {
         sourceLabel?: string;
         location?: string;
         threshold?: number;
+        bridgeTransport?: BridgeTransport;
+        zonePreset?: ZoneRulePreset;
+        lineRatio?: number;
+        upperZoneLimit?: number;
+        lowerZoneLimit?: number;
         regionMode?: RegionMode;
         detectionMode?: DetectionMode;
         frameIntervalMs?: number;
@@ -286,6 +338,11 @@ export default function OccupancyPage() {
       if (parsed.sourceLabel) setSourceLabel(parsed.sourceLabel);
       if (parsed.location) setLocation(parsed.location);
       if (typeof parsed.threshold === 'number') setThreshold(parsed.threshold);
+      if (parsed.bridgeTransport) setBridgeTransport(parsed.bridgeTransport);
+      if (parsed.zonePreset) setZonePreset(parsed.zonePreset);
+      if (typeof parsed.lineRatio === 'number') setLineRatio(parsed.lineRatio);
+      if (typeof parsed.upperZoneLimit === 'number') setUpperZoneLimit(parsed.upperZoneLimit);
+      if (typeof parsed.lowerZoneLimit === 'number') setLowerZoneLimit(parsed.lowerZoneLimit);
       if (parsed.regionMode) setRegionMode(parsed.regionMode);
       if (parsed.detectionMode) setDetectionMode(parsed.detectionMode);
       if (typeof parsed.frameIntervalMs === 'number') setFrameIntervalMs(parsed.frameIntervalMs);
@@ -308,6 +365,11 @@ export default function OccupancyPage() {
         sourceLabel,
         location,
         threshold,
+        bridgeTransport,
+        zonePreset,
+        lineRatio,
+        upperZoneLimit,
+        lowerZoneLimit,
         regionMode,
         detectionMode,
         frameIntervalMs,
@@ -316,7 +378,7 @@ export default function OccupancyPage() {
         selectedStationId,
       }),
     );
-  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, regionMode, detectionMode, frameIntervalMs, autoSnapshotMode, stations, selectedStationId]);
+  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, bridgeTransport, zonePreset, lineRatio, upperZoneLimit, lowerZoneLimit, regionMode, detectionMode, frameIntervalMs, autoSnapshotMode, stations, selectedStationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -358,6 +420,10 @@ export default function OccupancyPage() {
       cameraMode,
       sourceUrl,
       threshold,
+      upperZoneLimit,
+      lowerZoneLimit,
+      lineRatio,
+      bridgeTransport,
       regionMode,
       detectionMode,
       frameIntervalMs,
@@ -366,7 +432,7 @@ export default function OccupancyPage() {
       location,
       lastSnapshotAt,
     };
-  }, [autoSnapshotMode, cameraMode, detectionMode, frameIntervalMs, lastSnapshotAt, location, regionMode, sourceLabel, sourceUrl, threshold]);
+  }, [autoSnapshotMode, bridgeTransport, cameraMode, detectionMode, frameIntervalMs, lastSnapshotAt, lineRatio, location, lowerZoneLimit, regionMode, sourceLabel, sourceUrl, threshold, upperZoneLimit]);
 
   useEffect(() => {
     if (stations.length > 0) return;
@@ -402,6 +468,8 @@ export default function OccupancyPage() {
   const snapshot = useMemo(() => {
     const timestamp = new Date().toISOString();
     const alert = occupancyStatus(count, threshold);
+    const upperStatus = occupancyStatus(upperZoneCount, upperZoneLimit);
+    const lowerStatus = occupancyStatus(lowerZoneCount, lowerZoneLimit);
     return {
       title: 'Occupancy Snapshot',
       location,
@@ -413,16 +481,48 @@ export default function OccupancyPage() {
       alertLevel: alert.level,
       timestamp,
       labels: detections.map((d, index) => `${index + 1}. ${d.class} ${Math.round(d.score * 100)}%`).slice(0, 8),
+      entryCount,
+      exitCount,
+      upperZoneCount,
+      lowerZoneCount,
+      upperZoneStatus: upperStatus.level,
+      lowerZoneStatus: lowerStatus.level,
     } satisfies OccupancySnapshot;
-  }, [avgScore, count, detections, location, regionMode, sourceLabel, threshold]);
+  }, [avgScore, count, detections, entryCount, exitCount, location, lowerZoneCount, lowerZoneLimit, regionMode, sourceLabel, threshold, upperZoneCount, upperZoneLimit]);
 
   const packet = useMemo(() => buildOccupancyPacket(snapshot), [snapshot]);
   const command = useMemo(() => buildRegisterCommand(snapshot, occupancyDeployment.address), [snapshot]);
   const bridgeGuide = useMemo(() => buildBridgeGuide(sourceLabel, sourceUrl), [sourceLabel, sourceUrl]);
   const occupancy = occupancyStatus(count, threshold);
 
+  useEffect(() => {
+    if (zonePreset === 'balanced') {
+      setUpperZoneLimit(Math.max(1, Math.round(threshold / 2)));
+      setLowerZoneLimit(Math.max(1, Math.round(threshold / 2)));
+      return;
+    }
+    if (zonePreset === 'entry-heavy') {
+      setUpperZoneLimit(Math.max(1, Math.round(threshold * 0.35)));
+      setLowerZoneLimit(Math.max(1, Math.round(threshold * 0.75)));
+      return;
+    }
+    setUpperZoneLimit(Math.max(1, Math.round(threshold * 0.75)));
+    setLowerZoneLimit(Math.max(1, Math.round(threshold * 0.35)));
+  }, [threshold, zonePreset]);
+
   function proxyCameraUrl(url: string) {
     return `/api/camera-proxy?url=${encodeURIComponent(url)}`;
+  }
+
+  function addOpsEvent(type: OpsEvent['type'], tone: OpsEvent['tone'], message: string) {
+    const event: OpsEvent = {
+      id: crypto.randomUUID(),
+      type,
+      tone,
+      message,
+      timestamp: new Date().toISOString(),
+    };
+    setOpsEvents(prev => [event, ...prev].slice(0, 16));
   }
 
   async function copyText(key: string, value: string) {
@@ -573,9 +673,15 @@ export default function OccupancyPage() {
         if (!sourceUrl.trim()) {
           throw new Error('Add a live camera URL before starting.');
         }
-        await loadRemoteFrame(sourceUrl.trim());
+        if (bridgeTransport === 'mjpeg-stream') {
+          if (remoteImageRef.current) {
+            remoteImageRef.current.src = proxyCameraUrl(sourceUrl.trim());
+          }
+        } else {
+          await loadRemoteFrame(sourceUrl.trim());
+        }
         setConnectionState('ready');
-        setConnectionNote('Remote camera bridge connected.');
+        setConnectionNote(bridgeTransport === 'mjpeg-stream' ? 'MJPEG bridge connected.' : 'Remote camera bridge connected.');
         setStatus('Feed on');
       }
       setCameraOn(true);
@@ -585,6 +691,16 @@ export default function OccupancyPage() {
       setFramesProcessed(0);
       setPeakCount(0);
       setAlertEvents(0);
+      setEntryCount(0);
+      setExitCount(0);
+      setUpperZoneCount(0);
+      setLowerZoneCount(0);
+      trackedPeopleRef.current = [];
+      nextTrackIdRef.current = 1;
+      alertStateRef.current = 'NORMAL';
+      upperZoneStateRef.current = 'NORMAL';
+      lowerZoneStateRef.current = 'NORMAL';
+      addOpsEvent('session', 'normal', cameraMode === 'webcam' ? 'Webcam session started.' : 'Bridge monitoring session started.');
       void detectLoop();
     } catch (err) {
       setConnectionState('error');
@@ -620,6 +736,11 @@ export default function OccupancyPage() {
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
     setStatus('Stopped');
+    trackedPeopleRef.current = [];
+    alertStateRef.current = 'NORMAL';
+    upperZoneStateRef.current = 'NORMAL';
+    lowerZoneStateRef.current = 'NORMAL';
+    addOpsEvent('session', 'warn', 'Monitoring session stopped.');
   }
 
   async function detectLoop() {
@@ -655,8 +776,14 @@ export default function OccupancyPage() {
           scheduleNextLoop();
           return;
         }
-        displayFrame.src = frameUrl(url);
-        await displayFrame.decode();
+        if (runtime.bridgeTransport === 'mjpeg-stream') {
+          if (!displayFrame.src) {
+            displayFrame.src = proxyCameraUrl(url);
+          }
+        } else {
+          displayFrame.src = frameUrl(url);
+          await displayFrame.decode();
+        }
         if (!activeRef.current) return;
         input = displayFrame;
         width = displayFrame.naturalWidth || displayFrame.width;
@@ -679,11 +806,16 @@ export default function OccupancyPage() {
         return isDetectionInRegion(result.bbox, runtime.regionMode, height);
       });
       const frameTimestamp = new Date().toISOString();
+      const lineY = height * runtime.lineRatio;
+      const upperCountNext = next.filter(item => detectionCenter(item.bbox).y < lineY).length;
+      const lowerCountNext = Math.max(0, next.length - upperCountNext);
       const nextAvg =
         next.length > 0
           ? next.reduce((total, item) => total + item.score, 0) / next.length
           : 0;
       const frameAlert = occupancyStatus(next.length, runtime.threshold);
+      const upperZoneAlert = occupancyStatus(upperCountNext, runtime.upperZoneLimit);
+      const lowerZoneAlert = occupancyStatus(lowerCountNext, runtime.lowerZoneLimit);
       const frameSnapshot: OccupancySnapshot = {
         title: 'Occupancy Snapshot',
         location: runtime.location,
@@ -695,23 +827,101 @@ export default function OccupancyPage() {
         alertLevel: frameAlert.level,
         timestamp: frameTimestamp,
         labels: next.map((d, index) => `${index + 1}. ${d.class} ${Math.round(d.score * 100)}%`).slice(0, 8),
+        entryCount,
+        exitCount,
+        upperZoneCount: upperCountNext,
+        lowerZoneCount: lowerCountNext,
+        upperZoneStatus: upperZoneAlert.level,
+        lowerZoneStatus: lowerZoneAlert.level,
       };
+
+      const previousTracks = trackedPeopleRef.current;
+      const matchedTrackIds = new Set<number>();
+      const nextTracks: TrackedPerson[] = [];
+      let entriesDelta = 0;
+      let exitsDelta = 0;
+
+      next.forEach(result => {
+        const center = detectionCenter(result.bbox);
+        let best: TrackedPerson | null = null;
+        let bestDistance = Math.max(40, Math.min(width, height) * 0.08);
+
+        previousTracks.forEach(track => {
+          if (matchedTrackIds.has(track.id)) return;
+          const distance = Math.hypot(track.x - center.x, track.y - center.y);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = track;
+          }
+        });
+
+        const nextSide = sideForPoint(center.y, lineY, Math.max(10, height * 0.035));
+
+        if (best) {
+          matchedTrackIds.add(best.id);
+          nextTracks.push({ id: best.id, x: center.x, y: center.y, side: nextSide });
+          if (best.side === 'upper' && nextSide === 'lower') {
+            entriesDelta += 1;
+          } else if (best.side === 'lower' && nextSide === 'upper') {
+            exitsDelta += 1;
+          }
+        } else {
+          nextTracks.push({ id: nextTrackIdRef.current++, x: center.x, y: center.y, side: nextSide });
+        }
+      });
+
+      trackedPeopleRef.current = nextTracks;
 
       setDetections(next);
       setCount(next.length);
       setAvgScore(nextAvg);
+      setUpperZoneCount(upperCountNext);
+      setLowerZoneCount(lowerCountNext);
       setLastFrameAt(frameTimestamp);
       setFramesProcessed(prev => prev + 1);
       setPeakCount(prev => Math.max(prev, next.length));
       if (next.length > runtime.threshold) {
         setAlertEvents(prev => prev + 1);
       }
+      if (frameAlert.level === 'ALERT' && alertStateRef.current !== 'ALERT') {
+        addOpsEvent('count', 'alert', `Global occupancy exceeded threshold with ${next.length} people.`);
+      } else if (frameAlert.level !== 'ALERT' && alertStateRef.current === 'ALERT') {
+        addOpsEvent('count', 'normal', 'Global occupancy returned below threshold.');
+      }
+      alertStateRef.current = frameAlert.level;
+      if (entriesDelta > 0) {
+        setEntryCount(prev => prev + entriesDelta);
+        addOpsEvent('count', 'normal', `${entriesDelta} entry movement${entriesDelta > 1 ? 's' : ''} crossed the line.`);
+      }
+      if (exitsDelta > 0) {
+        setExitCount(prev => prev + exitsDelta);
+        addOpsEvent('count', 'warn', `${exitsDelta} exit movement${exitsDelta > 1 ? 's' : ''} crossed the line.`);
+      }
+      if (upperZoneAlert.level === 'ALERT' && upperZoneStateRef.current !== 'ALERT') {
+        addOpsEvent('zone', 'alert', `Upper zone exceeded its limit with ${upperCountNext} people.`);
+      }
+      if (lowerZoneAlert.level === 'ALERT' && lowerZoneStateRef.current !== 'ALERT') {
+        addOpsEvent('zone', 'alert', `Lower zone exceeded its limit with ${lowerCountNext} people.`);
+      }
+      upperZoneStateRef.current = upperZoneAlert.level;
+      lowerZoneStateRef.current = lowerZoneAlert.level;
 
       const ctx = canvasRef.current.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         ctx.lineWidth = 3;
         ctx.font = '18px Segoe UI, Arial, sans-serif';
+        ctx.strokeStyle = 'rgba(34,211,238,0.9)';
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.moveTo(0, lineY);
+        ctx.lineTo(width, lineY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(34,211,238,0.95)';
+        ctx.fillRect(14, Math.max(8, lineY - 32), 180, 24);
+        ctx.fillStyle = '#041019';
+        ctx.fillText(`Count line ${Math.round(runtime.lineRatio * 100)}%`, 24, Math.max(26, lineY - 14));
         if (runtime.regionMode !== 'full') {
           ctx.strokeStyle = 'rgba(255,255,255,0.65)';
           ctx.setLineDash([14, 10]);
@@ -766,6 +976,7 @@ export default function OccupancyPage() {
     setHistory(prev => [record, ...prev].slice(0, 12));
     setLastPacket(buildOccupancyPacket({ ...snapshot, timestamp }));
     setLastSnapshotAt(timestamp);
+    addOpsEvent('snapshot', 'normal', `Snapshot saved for ${sourceLabel} at ${new Date(timestamp).toLocaleTimeString()}.`);
   }
 
   function exportPacket() {
@@ -776,6 +987,51 @@ export default function OccupancyPage() {
     anchor.download = 'occupancy-packet.md';
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function exportOpsReport() {
+    const payload = {
+      camera: sourceLabel,
+      location,
+      generatedAt: new Date().toISOString(),
+      feedMode: cameraMode,
+      detectionMode,
+      threshold,
+      lineRatio,
+      upperZoneLimit,
+      lowerZoneLimit,
+      summary: {
+        currentCount: count,
+        peakCount,
+        entryCount,
+        exitCount,
+        alertEvents,
+        upperZoneCount,
+        lowerZoneCount,
+        lastSnapshotAt,
+      },
+      snapshots: history,
+      events: opsEvents,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'occupancy-ops-report.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetFlowCounters() {
+    setEntryCount(0);
+    setExitCount(0);
+    setAlertEvents(0);
+    setPeakCount(count);
+    trackedPeopleRef.current = [];
+    alertStateRef.current = occupancy.level;
+    upperZoneStateRef.current = occupancyStatus(upperZoneCount, upperZoneLimit).level;
+    lowerZoneStateRef.current = occupancyStatus(lowerZoneCount, lowerZoneLimit).level;
+    addOpsEvent('session', 'warn', 'Entry, exit, and alert counters were reset.');
   }
 
   const alertTone = occupancy.level === 'ALERT' ? 'bg-red-600 text-white' : occupancy.level === 'WATCH' ? 'bg-slate-950 text-white' : 'bg-white/5 text-white';
@@ -1075,6 +1331,32 @@ export default function OccupancyPage() {
                 </p>
               </div>
 
+              {cameraMode !== 'webcam' ? (
+                <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Bridge transport</span>
+                    <span className="text-xs text-white/55">{bridgeTransport === 'jpeg-poll' ? 'Best for snapshot endpoints' : 'Best for MJPEG gateways and NVR browser streams'}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {([
+                      { id: 'jpeg-poll' as const, label: 'JPEG polling' },
+                      { id: 'mjpeg-stream' as const, label: 'MJPEG stream' },
+                    ]).map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setBridgeTransport(option.id)}
+                        className={`inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          bridgeTransport === option.id ? 'border-cyan-400 bg-cyan-400/15 text-white' : 'border-white/10 bg-slate-950/80 text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Detection mode</span>
@@ -1191,6 +1473,69 @@ export default function OccupancyPage() {
                 </label>
               </div>
 
+              <div className="rounded-[18px] border border-white/10 bg-white/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Zone rules and flow counting</p>
+                    <p className="mt-1 text-sm text-white/60">Track movement across a line and enforce separate limits for upper and lower zones.</p>
+                  </div>
+                  <ActionButton onClick={resetFlowCounters} className="border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white hover:bg-white/5">
+                    <Activity size={14} /> Reset counters
+                  </ActionButton>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <label className="grid gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rule preset</span>
+                    <select
+                      value={zonePreset}
+                      onChange={e => setZonePreset(e.target.value as ZoneRulePreset)}
+                      className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-red-600"
+                    >
+                      <option value="balanced">Balanced</option>
+                      <option value="entry-heavy">Entry heavy</option>
+                      <option value="floor-heavy">Floor heavy</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Upper zone limit</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={upperZoneLimit}
+                      onChange={e => setUpperZoneLimit(Number(e.target.value) || 1)}
+                      className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-red-600"
+                    />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Lower zone limit</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={lowerZoneLimit}
+                      onChange={e => setLowerZoneLimit(Number(e.target.value) || 1)}
+                      className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-red-600"
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 grid gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Line crossing position</span>
+                    <span className="text-sm font-semibold text-white/75">{Math.round(lineRatio * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={20}
+                    max={80}
+                    value={Math.round(lineRatio * 100)}
+                    onChange={e => setLineRatio(Number(e.target.value) / 100)}
+                    className="h-2 w-full appearance-none rounded-full bg-white/10 accent-cyan-400"
+                  />
+                  <p className="text-xs text-white/55">Crossing from upper to lower counts as entry. Crossing from lower to upper counts as exit.</p>
+                </div>
+              </div>
+
               <div className="grid gap-2 md:grid-cols-[1fr_auto]">
                 <label className="grid gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Alert threshold</span>
@@ -1289,11 +1634,15 @@ export default function OccupancyPage() {
                 <Metric label="Alert level" value={occupancy.level} hint="Threshold state" />
                 <Metric label="Camera" value={sourceLabel} hint={location} />
                 <Metric label="Zone" value={regionLabel(regionMode)} hint="Counting region" />
-                <Metric label="Feed mode" value={cameraMode === 'webcam' ? 'Webcam live' : 'Bridge polling'} hint={cameraMode === 'webcam' ? 'Direct browser video' : `Frame cadence ${frameIntervalMs} ms`} />
+                <Metric label="Feed mode" value={cameraMode === 'webcam' ? 'Webcam live' : bridgeTransport === 'mjpeg-stream' ? 'MJPEG bridge' : 'Bridge polling'} hint={cameraMode === 'webcam' ? 'Direct browser video' : bridgeTransport === 'mjpeg-stream' ? 'Continuous browser stream via MJPEG' : `Frame cadence ${frameIntervalMs} ms`} />
+                <Metric label="Entries" value={String(entryCount)} hint="Upper to lower crossings" />
+                <Metric label="Exits" value={String(exitCount)} hint="Lower to upper crossings" />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Metric label="Registry" value={occupancyDeployment.contract} hint={occupancyDeployment.address} />
                 <Metric label="Chain tx" value={occupancyDeployment.tx.slice(0, 12)} hint="Bootstrap record" />
+                <Metric label="Upper zone" value={`${upperZoneCount}/${upperZoneLimit}`} hint={occupancyStatus(upperZoneCount, upperZoneLimit).label} />
+                <Metric label="Lower zone" value={`${lowerZoneCount}/${lowerZoneLimit}`} hint={occupancyStatus(lowerZoneCount, lowerZoneLimit).label} />
               </div>
               <p className="mt-4 rounded-[16px] border border-white/10 bg-white/5 p-4 text-sm text-white/75">
                 {count === 0
@@ -1317,6 +1666,11 @@ export default function OccupancyPage() {
               </div>
               <div className="mt-4 rounded-[16px] border border-white/10 bg-white/5 p-4 text-sm text-white/75">
                 This desk is designed for operational use with GenLayer evidence packets: keep a camera station online, monitor frame health, archive snapshots on cadence, and register threshold events on-chain when needed.
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton onClick={exportOpsReport} className="border border-white/15 bg-slate-950/80 text-white hover:bg-white/5">
+                  <Download size={16} /> Export ops report
+                </ActionButton>
               </div>
             </Panel>
 
@@ -1342,6 +1696,42 @@ export default function OccupancyPage() {
                     <ArrowUpRight size={16} /> {copyState.register ? 'Command copied' : 'Copy register call'}
                   </ActionButton>
                 </div>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <Activity size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Event log</h3>
+              </div>
+              <div className="mt-4 space-y-2">
+                {opsEvents.length ? (
+                  opsEvents.map(event => (
+                    <div key={event.id} className="rounded-[18px] border border-white/10 bg-slate-950/80 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-white">{event.message}</p>
+                          <p className="mt-1 text-xs text-white/55">{new Date(event.timestamp).toLocaleString()}</p>
+                        </div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase ${
+                            event.tone === 'alert'
+                              ? 'bg-red-600 text-white'
+                              : event.tone === 'warn'
+                                ? 'bg-white/10 text-white'
+                                : 'bg-cyan-400/15 text-cyan-100'
+                          }`}
+                        >
+                          {event.type}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-white/65">
+                    No live events yet. Start monitoring to build a running ops log.
+                  </div>
+                )}
               </div>
             </Panel>
 

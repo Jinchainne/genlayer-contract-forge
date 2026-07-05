@@ -15,6 +15,12 @@ export type OccupancySnapshot = {
   alertLevel: 'NORMAL' | 'WATCH' | 'ALERT';
   timestamp: string;
   labels: string[];
+  entryCount?: number;
+  exitCount?: number;
+  upperZoneCount?: number;
+  lowerZoneCount?: number;
+  upperZoneStatus?: 'NORMAL' | 'WATCH' | 'ALERT';
+  lowerZoneStatus?: 'NORMAL' | 'WATCH' | 'ALERT';
 };
 
 export function occupancyStatus(count: number, threshold: number) {
@@ -39,6 +45,12 @@ export function buildOccupancyPacket(snapshot: OccupancySnapshot) {
     `Threshold: ${snapshot.threshold}`,
     `Alert level: ${snapshot.alertLevel}`,
     `Average score: ${snapshot.avgScore.toFixed(2)}`,
+    snapshot.entryCount !== undefined ? `Entries: ${snapshot.entryCount}` : null,
+    snapshot.exitCount !== undefined ? `Exits: ${snapshot.exitCount}` : null,
+    snapshot.upperZoneCount !== undefined ? `Upper zone count: ${snapshot.upperZoneCount}` : null,
+    snapshot.upperZoneStatus ? `Upper zone status: ${snapshot.upperZoneStatus}` : null,
+    snapshot.lowerZoneCount !== undefined ? `Lower zone count: ${snapshot.lowerZoneCount}` : null,
+    snapshot.lowerZoneStatus ? `Lower zone status: ${snapshot.lowerZoneStatus}` : null,
     '',
     '## Labels',
     snapshot.labels.length ? snapshot.labels.map(label => `- ${label}`).join('\n') : '- none',
@@ -59,7 +71,8 @@ export function buildRegisterCommand(snapshot: OccupancySnapshot, registryAddres
     `  --threshold ${snapshot.threshold} \\`,
     `  --avg-score ${snapshot.avgScore.toFixed(2)} \\`,
     `  --alert-level "${snapshot.alertLevel}" \\`,
-    `  --timestamp "${snapshot.timestamp}"`,
+    `  --timestamp "${snapshot.timestamp}" \\`,
+    `  --labels "${snapshot.labels.join(', ').replace(/"/g, '\\"')}"`,
   ]
     .filter(Boolean)
     .join('\n');

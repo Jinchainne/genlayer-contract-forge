@@ -175,6 +175,71 @@ class DisputeResolver(gl.Contract):
         return self._decision`,
     compareSource: compareSample,
   },
+  {
+    id: 'occupancy-registry',
+    label: 'Occupancy registry',
+    title: 'OccupancyEventRegistry',
+    description: 'Track people-count events, preserve latest threshold state, and expose review-friendly views.',
+    source: `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class OccupancyEventRegistry(gl.Contract):
+    def __init__(self):
+        self._latest = ""
+        self._peak = 0
+
+    @gl.public.write
+    def register_snapshot(self, location: str, count: int, threshold: int) -> str:
+        def evaluate():
+            status = "alert" if count > threshold else "watch" if count == threshold else "normal"
+            return f"{location}:{count}:{threshold}:{status}"
+
+        result = gl.eq_principle_strict_eq(evaluate)
+        self._latest = result
+        self._peak = count if count > self._peak else self._peak
+        return result
+
+    @gl.public.view
+    def latest(self) -> str:
+        return self._latest
+
+    @gl.public.view
+    def peak(self) -> int:
+        return self._peak`,
+    compareSource: compareSample,
+  },
+  {
+    id: 'source-attestor',
+    label: 'Source attestor',
+    title: 'SourceAttestor',
+    description: 'Bind a source URL, prompt consensus result, and audit hash into a single GenLayer write path.',
+    source: `# { "Depends": "py-genlayer:test" }
+from genlayer import *
+
+class SourceAttestor(gl.Contract):
+    def __init__(self):
+        self._latest_hash = ""
+
+    @gl.public.write
+    def attest(self, source_url: str, claim: str) -> str:
+        def evaluate():
+            prompt = f"""
+            Validate the claim against the source.
+            source_url={source_url}
+            claim={claim}
+            Return approved=yes|no;reason=short reason
+            """
+            return gl.exec_prompt(prompt).strip()
+
+        result = gl.eq_principle_strict_eq(evaluate)
+        self._latest_hash = result
+        return result
+
+    @gl.public.view
+    def latest(self) -> str:
+        return self._latest_hash`,
+    compareSource: compareSample,
+  },
 ] as const;
 
 const fallbackAnalysis = analyzeGenLayerContract(primarySample, 'ProvenanceRegistry');
@@ -357,6 +422,42 @@ function buildRegisterAnalysisCommand(
   ].join('\n');
 }
 
+function buildDeployRunbook(
+  title: string,
+  network: TargetNetwork,
+  analysis: AnalysisResult,
+  deployCommand: string,
+  registerCommand: string,
+) {
+  return [
+    `# Deploy Runbook: ${sanitizeContractTitle(title)}`,
+    '',
+    `Target network: ${network}`,
+    `Readiness score: ${analysis.score}/100`,
+    `Verdict: ${analysis.verdict}`,
+    '',
+    '## 1. Preflight',
+    '- Confirm the contract includes the GenVM Depends header.',
+    '- Confirm at least one public write and one public view method are exposed.',
+    '- Review every error-level finding before moving to deployment.',
+    '',
+    '## 2. Local verification',
+    '- Run direct tests against the current draft.',
+    '- Re-check mocked web or LLM behavior for deterministic execution.',
+    '',
+    '## 3. Deploy',
+    deployCommand,
+    '',
+    '## 4. Registry handoff',
+    registerCommand,
+    '',
+    '## 5. Operator notes',
+    '- Save the deployment transaction hash.',
+    '- Keep the exported submission and deploy pack beside the release notes.',
+    '- Confirm a reviewer can call at least one public view method after deployment.',
+  ].join('\n');
+}
+
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -437,6 +538,10 @@ export default function Page() {
   const registerAnalysisCommand = useMemo(
     () => buildRegisterAnalysisCommand(analysis, title, reportHash, String(forgeDeployment.address || 'pending')),
     [analysis, reportHash, title],
+  );
+  const deployRunbook = useMemo(
+    () => buildDeployRunbook(title, targetNetwork, analysis, deployCommand, registerAnalysisCommand),
+    [analysis, deployCommand, registerAnalysisCommand, targetNetwork, title],
   );
   const workflowReadiness = useMemo(
     () => [
@@ -628,6 +733,7 @@ export default function Page() {
       reportHash,
       targetNetwork,
       deployCommand,
+      deployRunbook,
       registerAnalysisCommand,
       source,
       compareSource,
@@ -965,6 +1071,35 @@ export default function Page() {
               )}
             </div>
           </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
+              <Layers3 size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Template gallery</h3>
+            </div>
+            <p className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
+              Start from practical GenLayer patterns instead of a blank file. These templates are shaped for operational registries, attestation flows, and reviewable public APIs.
+            </p>
+            <div className="mt-4 grid gap-3">
+              {presets.map(preset => (
+                <button
+                  key={`gallery-${preset.id}`}
+                  type="button"
+                  onClick={() => loadPreset(preset.id)}
+                  className="rounded-[18px] border border-black/10 bg-white p-4 text-left transition hover:border-red-600 hover:bg-red-50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-black">{preset.label}</p>
+                      <p className="mt-1 text-xs text-black/55">{preset.title}</p>
+                    </div>
+                    {selectedPreset === preset.id ? <span className="rounded-full bg-black px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white">Active</span> : null}
+                  </div>
+                  <p className="mt-3 text-sm text-black/70">{preset.description}</p>
+                </button>
+              ))}
+            </div>
+          </Panel>
           </div>
 
           <div className="grid gap-4">
@@ -1175,12 +1310,11 @@ export default function Page() {
               </div>
               <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Command</p>
-                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{`genlayer network studionet
-genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}</pre>
+                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{deployCommand}</pre>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
                 <ActionButton
-                  onClick={() => copyText('command', `genlayer network studionet\ngenlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`)}
+                  onClick={() => copyText('command', deployCommand)}
                   className="border border-black/15 bg-white text-black hover:bg-black/5"
                 >
                   <ClipboardCopy size={16} /> {copyStatus.command === 'copied' ? 'Command copied' : 'Copy deploy command'}
@@ -1318,6 +1452,24 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 </ActionButton>
                 <ActionButton onClick={() => copyText('register-analysis', registerAnalysisCommand)} className="bg-red-600 text-white hover:bg-red-700">
                   <ArrowUpRight size={16} /> {copyStatus['register-analysis'] === 'copied' ? 'Register call copied' : 'Copy register call'}
+                </ActionButton>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <MoveRight size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Deploy runbook</h3>
+              </div>
+              <div className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{deployRunbook}</pre>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton onClick={() => copyText('deploy-runbook', deployRunbook)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Copy size={16} /> {copyStatus['deploy-runbook'] === 'copied' ? 'Runbook copied' : 'Copy runbook'}
+                </ActionButton>
+                <ActionButton onClick={() => downloadText(`${title || 'contract'}-deploy-runbook.md`, deployRunbook)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Download size={16} /> Download runbook
                 </ActionButton>
               </div>
             </Panel>

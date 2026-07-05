@@ -162,17 +162,20 @@ src/
 - baseline comparison
 - draft vault
 - Patch Studio
+- practical template gallery for operational GenLayer flows
 - direct test scaffold generation
 - README snippet generation
 - deploy pack and submission pack export
 - target network selection
 - on-chain analysis registry command generation
+- deploy runbook generation
 
 ### Occupancy AI Desk
 
 - local webcam mode
 - live bridge mode
 - LAN / RTSP / ONVIF operational path through a bridge
+- MJPEG bridge profile for browser-safe stream delivery
 - public camera demos, including Vietnam sources
 - person-only filtering
 - detection mode control
@@ -180,6 +183,8 @@ src/
 - frame polling cadence control
 - auto snapshot cadence
 - session metrics and alert metrics
+- line-based entry / exit counting
+- upper / lower zone rules with separate limits
 - GenLayer packet generation
 - on-chain occupancy register command generation
 
@@ -363,6 +368,10 @@ A small service pulls a selected channel from the recorder and exposes a clean p
 #### 4. Vendor cloud relay
 
 A backend worker calls the vendor API and publishes the latest safe frame for the app.
+
+#### 5. WebRTC gateway handoff
+
+If your camera infrastructure already terminates in a browser-safe WebRTC gateway, expose a companion snapshot or MJPEG surface for the current app, or place a thin relay in front of it. This repo focuses on the operator desk and registry flow, while the gateway remains the transport layer.
 
 ### Minimal bridge contract
 
