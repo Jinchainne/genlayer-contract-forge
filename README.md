@@ -39,6 +39,9 @@ This project focuses on those exact needs:
 - Ready-made GenLayer contract presets
 - Readiness scoring and review snapshot
 - Findings list with fix hints
+- Patch Studio for fast structural fixes
+- Network-aware deploy commands for Localnet, Studionet, and Bradbury workflow
+- On-chain analysis registry command generation with report hash
 - Version comparison panel
 - Draft vault / save state workflow
 - Deploy kit with command references
@@ -52,6 +55,9 @@ This project focuses on those exact needs:
 - AI-ready public camera frame demos, including Vietnam traffic/webcam sources
 - In-browser COCO-SSD people detection
 - Live bounding boxes on top of the camera feed
+- Adjustable bridge polling cadence for LAN cameras
+- Auto snapshot cadence for continuous monitoring runs
+- Session operations metrics: frame health, peak occupancy, alerts, and uptime
 - Threshold-based occupancy status
 - Snapshot packet generation
 - GenLayer command builder for registry submission

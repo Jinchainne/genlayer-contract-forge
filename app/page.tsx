@@ -190,6 +190,8 @@ type DraftProject = {
   updatedAt: string;
 };
 
+type TargetNetwork = 'studionet' | 'localnet' | 'testnet-bradbury';
+
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`relative isolate rounded-[20px] border border-black/10 bg-white p-5 shadow-[0_16px_42px_rgba(0,0,0,0.06)] ${className}`}>{children}</section>;
 }
@@ -314,6 +316,47 @@ function buildReadmeSnippet(title: string, analysis: AnalysisResult) {
   ].join('\n');
 }
 
+function quickHash(value: string) {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index);
+  }
+  return `0x${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function networkRpc(network: TargetNetwork) {
+  if (network === 'localnet') return 'http://localhost:4000/api';
+  if (network === 'testnet-bradbury') return '';
+  return 'https://studio.genlayer.com/api';
+}
+
+function networkCommand(network: TargetNetwork) {
+  if (network === 'localnet') return 'genlayer network localnet';
+  if (network === 'testnet-bradbury') return 'genlayer network testnet-bradbury';
+  return 'genlayer network studionet';
+}
+
+function buildRegisterAnalysisCommand(
+  analysis: AnalysisResult,
+  title: string,
+  reportHash: string,
+  registryAddress: string,
+) {
+  return [
+    `genlayer call ${registryAddress} register_analysis \\`,
+    `  --title "${sanitizeContractTitle(title)}" \\`,
+    `  --contract-name "${(analysis.contractNames[0] || sanitizeContractTitle(title)).replace(/"/g, '\\"')}" \\`,
+    `  --score ${analysis.score} \\`,
+    `  --verdict "${analysis.verdict.replace(/"/g, '\\"')}" \\`,
+    `  --summary "${analysis.summary.replace(/"/g, '\\"')}" \\`,
+    `  --report-hash "${reportHash}" \\`,
+    `  --blueprint-tags "${analysis.blueprintTags.join(', ').replace(/"/g, '\\"')}" \\`,
+    `  --public-views "${analysis.publicViews.join(', ').replace(/"/g, '\\"')}" \\`,
+    `  --public-writes "${analysis.publicWrites.join(', ').replace(/"/g, '\\"')}" \\`,
+    `  --findings-count ${analysis.findings.length}`,
+  ].join('\n');
+}
+
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -329,17 +372,21 @@ export default function Page() {
   const [activeDraftId, setActiveDraftId] = useState('');
   const [selectedPreset, setSelectedPreset] = useState<string>(presets[0].id);
   const [lastSaved, setLastSaved] = useState('');
+  const [targetNetwork, setTargetNetwork] = useState<TargetNetwork>('studionet');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { drafts?: DraftProject[]; activeDraftId?: string; selectedPreset?: string };
+      const parsed = JSON.parse(raw) as { drafts?: DraftProject[]; activeDraftId?: string; selectedPreset?: string; targetNetwork?: TargetNetwork };
       if (Array.isArray(parsed.drafts)) setDrafts(parsed.drafts);
       if (parsed.activeDraftId) setActiveDraftId(parsed.activeDraftId);
       if (parsed.selectedPreset) {
         setSelectedPreset(parsed.selectedPreset);
+      }
+      if (parsed.targetNetwork) {
+        setTargetNetwork(parsed.targetNetwork);
       }
       const latest = parsed.drafts?.find(item => item.id === parsed.activeDraftId) || parsed.drafts?.[0];
       if (latest) {
@@ -363,9 +410,10 @@ export default function Page() {
         drafts,
         activeDraftId,
         selectedPreset,
+        targetNetwork,
       }),
     );
-  }, [drafts, activeDraftId, selectedPreset]);
+  }, [drafts, activeDraftId, selectedPreset, targetNetwork]);
 
   const deployPack = useMemo(() => createDeployPack(analysis, title, forgeDeployment.address, forgeDeployment.tx), [analysis, title]);
   const submissionPack = useMemo(() => createSubmissionPack(analysis, title), [analysis, title]);
@@ -373,6 +421,48 @@ export default function Page() {
   const brief = useMemo(() => generateForgeBrief(source, title), [source, title]);
   const directTestScaffold = useMemo(() => buildDirectTestScaffold(title, analysis), [analysis, title]);
   const readmeSnippet = useMemo(() => buildReadmeSnippet(title, analysis), [analysis, title]);
+  const reportHash = useMemo(() => quickHash(`${title}\n${source}\n${brief.report}`), [brief.report, source, title]);
+  const deployCommand = useMemo(
+    () => {
+      const rpc = networkRpc(targetNetwork);
+      return [
+        networkCommand(targetNetwork),
+        rpc
+          ? `genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc ${rpc}`
+          : 'genlayer deploy --contract contracts/genlayer_contract_forge.py',
+      ].join('\n');
+    },
+    [targetNetwork],
+  );
+  const registerAnalysisCommand = useMemo(
+    () => buildRegisterAnalysisCommand(analysis, title, reportHash, String(forgeDeployment.address || 'pending')),
+    [analysis, reportHash, title],
+  );
+  const workflowReadiness = useMemo(
+    () => [
+      {
+        label: 'Contract surface',
+        value: analysis.contractNames.length > 0 && analysis.publicWrites.length > 0 && analysis.publicViews.length > 0 ? 'Ready' : 'Needs cleanup',
+        hint: 'Entry point and public methods',
+      },
+      {
+        label: 'Direct tests',
+        value: analysis.breakdown.tests >= 60 ? 'Documented' : 'Missing',
+        hint: 'Local and mocked verification',
+      },
+      {
+        label: 'Studio deploy',
+        value: analysis.breakdown.deployment >= 60 ? 'Mapped' : 'Add deploy path',
+        hint: 'GenLayer Studio / Studionet command',
+      },
+      {
+        label: 'Registry packet',
+        value: forgeDeployment.address ? 'Chain-ready' : 'Pending',
+        hint: 'Register analysis result on GenLayer',
+      },
+    ],
+    [analysis, forgeDeployment.address],
+  );
   const methodCount = analysis.publicViews.length + analysis.publicWrites.length;
   const findingCount = analysis.findings.length;
   const currentPreset = presetById(selectedPreset);
@@ -535,6 +625,10 @@ export default function Page() {
       deployPack,
       submissionPack,
       report: brief.report,
+      reportHash,
+      targetNetwork,
+      deployCommand,
+      registerAnalysisCommand,
       source,
       compareSource,
       generatedAt: new Date().toISOString(),
@@ -905,6 +999,43 @@ export default function Page() {
 
             <Panel>
               <div className="flex items-center gap-2">
+                <Bot size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Studio lane</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {workflowReadiness.map(item => (
+                  <Metric key={item.label} label={item.label} value={item.value} hint={item.hint} />
+                ))}
+              </div>
+              <div className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Target network</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {([
+                    { id: 'localnet', label: 'Localnet', note: 'Fast local debugging' },
+                    { id: 'studionet', label: 'Studionet', note: 'Shared Studio environment' },
+                    { id: 'testnet-bradbury', label: 'Bradbury', note: 'Production-like AI testing' },
+                  ] as const).map(option => {
+                    const active = targetNetwork === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setTargetNetwork(option.id)}
+                        className={`rounded-[16px] border px-4 py-3 text-left transition ${
+                          active ? 'border-red-600 bg-red-50' : 'border-black/15 bg-white hover:bg-black/5'
+                        }`}
+                      >
+                        <p className="text-sm font-black text-black">{option.label}</p>
+                        <p className="mt-1 text-xs text-black/55">{option.note}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
                 <TriangleAlert size={18} className="text-red-700" />
                 <h3 className="text-xl font-black">Findings</h3>
               </div>
@@ -1017,7 +1148,7 @@ export default function Page() {
             </div>
             <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Deploy command</p>
-              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{releaseChecklist.command}</pre>
+              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{deployCommand}</pre>
             </div>
             <div className="mt-4 grid gap-3">
               {analysis.testPlan.map(step => (
@@ -1077,7 +1208,7 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 <MoveRight size={18} className="text-red-700" />
                 <h3 className="text-xl font-black">Judge-ready notes</h3>
               </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+              <div className="mt-4 grid gap-3 lg:grid-cols-4">
                 <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Submission pack</p>
                   <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{submissionPack}</pre>
@@ -1089,6 +1220,10 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Forge brief</p>
                   <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{brief.report}</pre>
+                </div>
+                <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">On-chain register call</p>
+                  <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{registerAnalysisCommand}</pre>
                 </div>
               </div>
             </Panel>
@@ -1137,12 +1272,11 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
               </div>
               <div className="mt-4 rounded-[18px] border border-black/10 bg-black px-4 py-4 text-white">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Command</p>
-                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{`genlayer network studionet
-genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`}</pre>
+                <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-white/90">{deployCommand}</pre>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
                 <ActionButton
-                  onClick={() => copyText('command', `genlayer network studionet\ngenlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://studio.genlayer.com/api`)}
+                  onClick={() => copyText('command', deployCommand)}
                   className="border border-black/15 bg-white text-black hover:bg-black/5"
                 >
                   <ClipboardCopy size={16} /> {copyStatus.command === 'copied' ? 'Command copied' : 'Copy deploy command'}
@@ -1161,6 +1295,29 @@ genlayer deploy --contract contracts/genlayer_contract_forge.py --rpc https://st
                 </ActionButton>
                 <ActionButton onClick={exportAll} className="border border-black/15 bg-white text-black hover:bg-black/5">
                   <Download size={16} /> Export bundle
+                </ActionButton>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <ArrowUpRight size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">On-chain registry</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Metric label="Registry contract" value={String(forgeDeployment.contract || 'ContractForgeRegistry')} hint="GenLayer analysis registry" />
+                <Metric label="Report hash" value={reportHash} hint="Attach to the latest analysis packet" />
+              </div>
+              <div className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Register analysis call</p>
+                <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap text-[12px] leading-6 text-black/80">{registerAnalysisCommand}</pre>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton onClick={() => copyText('report-hash', reportHash)} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <Copy size={16} /> {copyStatus['report-hash'] === 'copied' ? 'Hash copied' : 'Copy report hash'}
+                </ActionButton>
+                <ActionButton onClick={() => copyText('register-analysis', registerAnalysisCommand)} className="bg-red-600 text-white hover:bg-red-700">
+                  <ArrowUpRight size={16} /> {copyStatus['register-analysis'] === 'copied' ? 'Register call copied' : 'Copy register call'}
                 </ActionButton>
               </div>
             </Panel>

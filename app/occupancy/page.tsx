@@ -8,6 +8,7 @@ import {
   Camera,
   CheckCircle2,
   ClipboardCopy,
+  Clock3,
   Download,
   Globe,
   Link2,
@@ -28,6 +29,7 @@ type CameraMode = 'webcam' | 'snapshot' | 'bridge';
 type ConnectionState = 'idle' | 'testing' | 'ready' | 'error';
 type RegionMode = 'full' | 'upper' | 'lower';
 type DetectionMode = 'strict' | 'balanced' | 'wide';
+type AutoSnapshotMode = 'off' | '30s' | '60s' | '5m';
 type StationProfile = {
   id: string;
   label: string;
@@ -187,6 +189,24 @@ function matchesPersonShape(
   return areaRatio >= minAreaRatio && heightToWidth >= minHeightToWidth && heightToWidth <= 5.5;
 }
 
+function autoSnapshotMs(mode: AutoSnapshotMode) {
+  if (mode === '30s') return 30_000;
+  if (mode === '60s') return 60_000;
+  if (mode === '5m') return 300_000;
+  return 0;
+}
+
+function formatDurationShort(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return '0m';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 export default function OccupancyPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteImageRef = useRef<HTMLImageElement | null>(null);
@@ -198,6 +218,18 @@ export default function OccupancyPage() {
   const activeRef = useRef(false);
   const loopRef = useRef<number | null>(null);
   const loopKindRef = useRef<'raf' | 'timeout' | null>(null);
+  const runtimeRef = useRef({
+    cameraMode: 'webcam' as CameraMode,
+    sourceUrl: '',
+    threshold: 4,
+    regionMode: 'full' as RegionMode,
+    detectionMode: 'strict' as DetectionMode,
+    frameIntervalMs: 900,
+    autoSnapshotMode: 'off' as AutoSnapshotMode,
+    sourceLabel: 'Lobby Camera',
+    location: 'Main entrance',
+    lastSnapshotAt: '',
+  });
 
   const [loadingModel, setLoadingModel] = useState(true);
   const [cameraOn, setCameraOn] = useState(false);
@@ -209,6 +241,8 @@ export default function OccupancyPage() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [regionMode, setRegionMode] = useState<RegionMode>('full');
   const [detectionMode, setDetectionMode] = useState<DetectionMode>('strict');
+  const [frameIntervalMs, setFrameIntervalMs] = useState(900);
+  const [autoSnapshotMode, setAutoSnapshotMode] = useState<AutoSnapshotMode>('off');
   const [stations, setStations] = useState<StationProfile[]>([]);
   const [selectedStationId, setSelectedStationId] = useState(DEFAULT_STATION_ID);
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
@@ -219,6 +253,12 @@ export default function OccupancyPage() {
   const [history, setHistory] = useState<SavedSnapshot[]>([]);
   const [copyState, setCopyState] = useState<Record<string, boolean>>({});
   const [lastPacket, setLastPacket] = useState('');
+  const [sessionStartedAt, setSessionStartedAt] = useState('');
+  const [lastFrameAt, setLastFrameAt] = useState('');
+  const [lastSnapshotAt, setLastSnapshotAt] = useState('');
+  const [framesProcessed, setFramesProcessed] = useState(0);
+  const [peakCount, setPeakCount] = useState(0);
+  const [alertEvents, setAlertEvents] = useState(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -235,6 +275,8 @@ export default function OccupancyPage() {
         threshold?: number;
         regionMode?: RegionMode;
         detectionMode?: DetectionMode;
+        frameIntervalMs?: number;
+        autoSnapshotMode?: AutoSnapshotMode;
         stations?: StationProfile[];
         selectedStationId?: string;
       };
@@ -246,6 +288,8 @@ export default function OccupancyPage() {
       if (typeof parsed.threshold === 'number') setThreshold(parsed.threshold);
       if (parsed.regionMode) setRegionMode(parsed.regionMode);
       if (parsed.detectionMode) setDetectionMode(parsed.detectionMode);
+      if (typeof parsed.frameIntervalMs === 'number') setFrameIntervalMs(parsed.frameIntervalMs);
+      if (parsed.autoSnapshotMode) setAutoSnapshotMode(parsed.autoSnapshotMode);
       if (Array.isArray(parsed.stations)) setStations(parsed.stations);
       if (parsed.selectedStationId) setSelectedStationId(parsed.selectedStationId);
     } catch {
@@ -266,11 +310,13 @@ export default function OccupancyPage() {
         threshold,
         regionMode,
         detectionMode,
+        frameIntervalMs,
+        autoSnapshotMode,
         stations,
         selectedStationId,
       }),
     );
-  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, regionMode, detectionMode, stations, selectedStationId]);
+  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, regionMode, detectionMode, frameIntervalMs, autoSnapshotMode, stations, selectedStationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,6 +352,21 @@ export default function OccupancyPage() {
   useEffect(() => {
     activeRef.current = cameraOn;
   }, [cameraOn]);
+
+  useEffect(() => {
+    runtimeRef.current = {
+      cameraMode,
+      sourceUrl,
+      threshold,
+      regionMode,
+      detectionMode,
+      frameIntervalMs,
+      autoSnapshotMode,
+      sourceLabel,
+      location,
+      lastSnapshotAt,
+    };
+  }, [autoSnapshotMode, cameraMode, detectionMode, frameIntervalMs, lastSnapshotAt, location, regionMode, sourceLabel, sourceUrl, threshold]);
 
   useEffect(() => {
     if (stations.length > 0) return;
@@ -444,13 +505,13 @@ export default function OccupancyPage() {
 
   function scheduleNextLoop() {
     if (!activeRef.current) return;
-    if (cameraMode === 'webcam') {
+    if (runtimeRef.current.cameraMode === 'webcam') {
       loopKindRef.current = 'raf';
       loopRef.current = window.requestAnimationFrame(detectLoop);
       return;
     }
     loopKindRef.current = 'timeout';
-    loopRef.current = window.setTimeout(detectLoop, 350);
+    loopRef.current = window.setTimeout(detectLoop, runtimeRef.current.frameIntervalMs);
   }
 
   function frameUrl(url: string) {
@@ -519,6 +580,11 @@ export default function OccupancyPage() {
       }
       setCameraOn(true);
       activeRef.current = true;
+      setSessionStartedAt(new Date().toISOString());
+      setLastFrameAt('');
+      setFramesProcessed(0);
+      setPeakCount(0);
+      setAlertEvents(0);
       void detectLoop();
     } catch (err) {
       setConnectionState('error');
@@ -566,8 +632,9 @@ export default function OccupancyPage() {
       let input: HTMLVideoElement | HTMLImageElement | null = null;
       let width = 0;
       let height = 0;
+      const runtime = runtimeRef.current;
 
-      if (cameraMode === 'webcam') {
+      if (runtime.cameraMode === 'webcam') {
         const video = videoRef.current;
         if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
           scheduleNextLoop();
@@ -577,7 +644,7 @@ export default function OccupancyPage() {
         width = video.videoWidth;
         height = video.videoHeight;
       } else {
-        const url = sourceUrl.trim();
+        const url = runtime.sourceUrl.trim();
         if (!url) {
           setStatus('No source URL');
           scheduleNextLoop();
@@ -604,28 +671,48 @@ export default function OccupancyPage() {
       canvasRef.current.width = width;
       canvasRef.current.height = height;
 
-      const thresholdScore = personConfidenceThreshold(cameraMode, detectionMode);
+      const thresholdScore = personConfidenceThreshold(runtime.cameraMode, runtime.detectionMode);
       const results = await modelRef.current.detect(input, 20, thresholdScore);
       const next = results.filter(result => {
         if (result.class !== 'person' || result.score < thresholdScore) return false;
-        if (!matchesPersonShape(result.bbox, width, height, cameraMode, detectionMode)) return false;
-        return isDetectionInRegion(result.bbox, regionMode, height);
+        if (!matchesPersonShape(result.bbox, width, height, runtime.cameraMode, runtime.detectionMode)) return false;
+        return isDetectionInRegion(result.bbox, runtime.regionMode, height);
       });
+      const frameTimestamp = new Date().toISOString();
       const nextAvg =
         next.length > 0
           ? next.reduce((total, item) => total + item.score, 0) / next.length
           : 0;
+      const frameAlert = occupancyStatus(next.length, runtime.threshold);
+      const frameSnapshot: OccupancySnapshot = {
+        title: 'Occupancy Snapshot',
+        location: runtime.location,
+        cameraName: runtime.sourceLabel,
+        region: regionLabel(runtime.regionMode),
+        count: next.length,
+        threshold: runtime.threshold,
+        avgScore: nextAvg,
+        alertLevel: frameAlert.level,
+        timestamp: frameTimestamp,
+        labels: next.map((d, index) => `${index + 1}. ${d.class} ${Math.round(d.score * 100)}%`).slice(0, 8),
+      };
 
       setDetections(next);
       setCount(next.length);
       setAvgScore(nextAvg);
+      setLastFrameAt(frameTimestamp);
+      setFramesProcessed(prev => prev + 1);
+      setPeakCount(prev => Math.max(prev, next.length));
+      if (next.length > runtime.threshold) {
+        setAlertEvents(prev => prev + 1);
+      }
 
       const ctx = canvasRef.current.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         ctx.lineWidth = 3;
         ctx.font = '18px Segoe UI, Arial, sans-serif';
-        if (regionMode !== 'full') {
+        if (runtime.regionMode !== 'full') {
           ctx.strokeStyle = 'rgba(255,255,255,0.65)';
           ctx.setLineDash([14, 10]);
           ctx.beginPath();
@@ -645,7 +732,22 @@ export default function OccupancyPage() {
         });
       }
 
-      setStatus(next.length > threshold ? 'Alert' : next.length === threshold ? 'Watch' : 'Live');
+      setStatus(next.length > runtime.threshold ? 'Alert' : next.length === runtime.threshold ? 'Watch' : 'Live');
+
+      const cadence = autoSnapshotMs(runtime.autoSnapshotMode);
+      if (cadence > 0) {
+        const now = Date.now();
+        const previousSnapshot = runtime.lastSnapshotAt ? new Date(runtime.lastSnapshotAt).getTime() : 0;
+        if (!previousSnapshot || now - previousSnapshot >= cadence) {
+          const record: SavedSnapshot = {
+            id: crypto.randomUUID(),
+            ...frameSnapshot,
+          };
+          setHistory(prev => [record, ...prev].slice(0, 12));
+          setLastPacket(buildOccupancyPacket(frameSnapshot));
+          setLastSnapshotAt(frameTimestamp);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Detection error');
       setStatus('Detection error');
@@ -662,7 +764,8 @@ export default function OccupancyPage() {
       timestamp,
     };
     setHistory(prev => [record, ...prev].slice(0, 12));
-    setLastPacket(packet);
+    setLastPacket(buildOccupancyPacket({ ...snapshot, timestamp }));
+    setLastSnapshotAt(timestamp);
   }
 
   function exportPacket() {
@@ -676,6 +779,9 @@ export default function OccupancyPage() {
   }
 
   const alertTone = occupancy.level === 'ALERT' ? 'bg-red-600 text-white' : occupancy.level === 'WATCH' ? 'bg-slate-950 text-white' : 'bg-white/5 text-white';
+  const lastFrameAge = lastFrameAt ? formatDurationShort(Date.now() - new Date(lastFrameAt).getTime()) : 'No frame yet';
+  const sessionUptime = sessionStartedAt ? formatDurationShort(Date.now() - new Date(sessionStartedAt).getTime()) : '0m';
+  const effectiveCadence = autoSnapshotMs(autoSnapshotMode);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#11173a_0%,#090d1a_44%,#050810_100%)] pt-[238px] text-white lg:pt-[198px]">
@@ -1047,7 +1153,42 @@ export default function OccupancyPage() {
               ) : null}
 
               <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-3 text-sm text-white/70">
-                <span className="font-semibold text-white">Best fit for home cameras:</span> RTSP or ONVIF through a local bridge that serves a live frame URL. The app polls that frame continuously and runs people detection on it.
+                <span className="font-semibold text-white">Best fit for internal cameras:</span> RTSP or ONVIF through a local bridge that serves a live frame URL. This app runs continuous frame polling, which is practical for browser-based enterprise monitoring when raw RTSP cannot be consumed directly in the client.
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <label className="grid gap-2 rounded-[18px] border border-white/10 bg-white/5 p-4">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Bridge polling cadence</span>
+                  <select
+                    value={String(frameIntervalMs)}
+                    onChange={e => setFrameIntervalMs(Number(e.target.value))}
+                    className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-red-600"
+                  >
+                    <option value="400">400 ms · fast lane</option>
+                    <option value="700">700 ms · responsive</option>
+                    <option value="900">900 ms · balanced</option>
+                    <option value="1200">1200 ms · low bandwidth</option>
+                    <option value="2000">2000 ms · long retention</option>
+                  </select>
+                  <p className="text-xs text-white/55">Lower values feel more live but use more LAN bandwidth and CPU.</p>
+                </label>
+
+                <label className="grid gap-2 rounded-[18px] border border-white/10 bg-white/5 p-4">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Auto snapshot cadence</span>
+                  <select
+                    value={autoSnapshotMode}
+                    onChange={e => setAutoSnapshotMode(e.target.value as AutoSnapshotMode)}
+                    className="rounded-[16px] border border-white/15 bg-slate-950/80 px-4 py-3 text-white outline-none transition focus:border-red-600"
+                  >
+                    <option value="off">Off</option>
+                    <option value="30s">Every 30 seconds</option>
+                    <option value="60s">Every 60 seconds</option>
+                    <option value="5m">Every 5 minutes</option>
+                  </select>
+                  <p className="text-xs text-white/55">
+                    {effectiveCadence > 0 ? `The app will archive a packet roughly every ${formatDurationShort(effectiveCadence)} while the source is live.` : 'Snapshots will be saved only when you press Save snapshot.'}
+                  </p>
+                </label>
               </div>
 
               <div className="grid gap-2 md:grid-cols-[1fr_auto]">
@@ -1148,6 +1289,7 @@ export default function OccupancyPage() {
                 <Metric label="Alert level" value={occupancy.level} hint="Threshold state" />
                 <Metric label="Camera" value={sourceLabel} hint={location} />
                 <Metric label="Zone" value={regionLabel(regionMode)} hint="Counting region" />
+                <Metric label="Feed mode" value={cameraMode === 'webcam' ? 'Webcam live' : 'Bridge polling'} hint={cameraMode === 'webcam' ? 'Direct browser video' : `Frame cadence ${frameIntervalMs} ms`} />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Metric label="Registry" value={occupancyDeployment.contract} hint={occupancyDeployment.address} />
@@ -1158,6 +1300,24 @@ export default function OccupancyPage() {
                   ? 'No people detected in the current frame.'
                   : `${count} person${count > 1 ? 's' : ''} currently visible. ${occupancy.label}.`}
               </p>
+            </Panel>
+
+            <Panel>
+              <div className="flex items-center gap-2">
+                <Clock3 size={18} className="text-red-700" />
+                <h3 className="text-xl font-black">Live operations</h3>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Metric label="Session uptime" value={sessionUptime} hint={sessionStartedAt ? new Date(sessionStartedAt).toLocaleString() : 'Start a source to begin tracking'} />
+                <Metric label="Last frame" value={lastFrameAge} hint={lastFrameAt ? new Date(lastFrameAt).toLocaleTimeString() : 'Waiting for first frame'} />
+                <Metric label="Frames processed" value={String(framesProcessed)} hint="Continuous detection loop" />
+                <Metric label="Peak occupancy" value={String(peakCount)} hint="Highest count seen this run" />
+                <Metric label="Alert events" value={String(alertEvents)} hint="Frames above threshold" />
+                <Metric label="Last snapshot" value={lastSnapshotAt ? new Date(lastSnapshotAt).toLocaleTimeString() : 'Manual only'} hint={autoSnapshotMode === 'off' ? 'Auto snapshots disabled' : `Auto cadence ${autoSnapshotMode}`} />
+              </div>
+              <div className="mt-4 rounded-[16px] border border-white/10 bg-white/5 p-4 text-sm text-white/75">
+                This desk is designed for operational use with GenLayer evidence packets: keep a camera station online, monitor frame health, archive snapshots on cadence, and register threshold events on-chain when needed.
+              </div>
             </Panel>
 
             <Panel>
