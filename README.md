@@ -49,6 +49,7 @@ This project focuses on those exact needs:
 - Browser webcam mode
 - Live remote frame mode through a bridge URL
 - LAN / RTSP / ONVIF integration path through a local bridge
+- AI-ready public camera frame demos, including Vietnam traffic/webcam sources
 - In-browser COCO-SSD people detection
 - Live bounding boxes on top of the camera feed
 - Threshold-based occupancy status
@@ -199,6 +200,7 @@ Best for:
 
 - simple remote feeds,
 - public demo cameras,
+- public Vietnam camera frames,
 - vendor systems that already expose JPEG snapshots.
 
 #### 3. LAN / RTSP / ONVIF

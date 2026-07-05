@@ -41,11 +41,40 @@ const STORAGE_KEY = 'genlayer-occupancy-desk:v1';
 const DEFAULT_STATION_ID = 'default-station';
 const PUBLIC_CAMERAS = [
   {
+    id: 'quy-nhon-traffic',
+    name: 'Quy Nhon Traffic',
+    location: 'Quy Nhon, Binh Dinh, Vietnam',
+    sourceUrl: 'https://www.worldcam.pl/images/webcams/420x236/quy-nhn-kamery-drogowe-obraz.jpg',
+    pageUrl: 'https://worldcam.eu/webcams/asia/vietnam/28399-quy-nhon-traffic',
+    sourceNote: 'Vietnam public traffic frame',
+    threshold: 8,
+  },
+  {
+    id: 'da-nang-traffic',
+    name: 'Da Nang Traffic',
+    location: 'Da Nang, Vietnam',
+    sourceUrl: 'https://www.worldcam.pl/images/webcams/420x236/phan-thiet-plaza-view.jpg',
+    pageUrl: 'https://worldcam.eu/webcams/asia/vietnam/15633-da-nang-traffic',
+    sourceNote: 'Vietnam public traffic frame',
+    threshold: 8,
+  },
+  {
+    id: 'ho-chi-minh-streets',
+    name: 'Ho Chi Minh Streets',
+    location: 'Ho Chi Minh City, Vietnam',
+    sourceUrl: 'https://cdn.skylinewebcams.com/3408.jpg',
+    pageUrl: 'https://www.skylinewebcams.com/en/webcam/vietnam/southeast/ho-chi-minh/streets.html',
+    sourceNote: 'Vietnam public webcam frame',
+    threshold: 8,
+  },
+  {
     id: 'washington-monument',
     name: 'Washington Monument',
     location: 'Washington, DC',
     sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=NGjLGGtpwbufJGuATXQhWQ%3D%3D&202607040700',
     pageUrl: 'https://www.earthcam.com/usa/dc/washingtonmonument/',
+    sourceNote: 'Global public webcam frame',
+    threshold: 4,
   },
   {
     id: 'abbey-road',
@@ -53,6 +82,8 @@ const PUBLIC_CAMERAS = [
     location: 'London, England',
     sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=qNvv42vqjNEKe80k0mCm0w%3D%3D&202607040700',
     pageUrl: 'https://www.earthcam.com/world/england/london/abbeyroad/',
+    sourceNote: 'Global public webcam frame',
+    threshold: 4,
   },
   {
     id: 'bourbon-street',
@@ -60,6 +91,8 @@ const PUBLIC_CAMERAS = [
     location: 'New Orleans, Louisiana',
     sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=N8RUAQGBH7drZ4LlKEGtVw%3D%3D&202607040700',
     pageUrl: 'https://www.earthcam.com/usa/louisiana/neworleans/bourbonstreet/',
+    sourceNote: 'Global public webcam frame',
+    threshold: 4,
   },
   {
     id: 'san-francisco',
@@ -67,6 +100,8 @@ const PUBLIC_CAMERAS = [
     location: 'San Francisco, California',
     sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=qvXEewsDItjfme6%2BYcScww%3D%3D&202607040700',
     pageUrl: 'https://www.earthcam.com/cams/california/sanfrancisco/',
+    sourceNote: 'Global public webcam frame',
+    threshold: 4,
   },
   {
     id: 'niagara-falls',
@@ -74,6 +109,8 @@ const PUBLIC_CAMERAS = [
     location: 'Ontario, Canada',
     sourceUrl: 'https://www.earthcam.com/cams/includes/image.php?logo=0&playbutton=1&s=1&img=EwPAynde%2BEMWfS37IbkAKA%3D%3D&202607040700',
     pageUrl: 'https://www.earthcam.com/canada/niagarafalls/',
+    sourceNote: 'Global public webcam frame',
+    threshold: 4,
   },
 ] as const;
 
@@ -344,7 +381,7 @@ export default function OccupancyPage() {
       mode: 'snapshot',
       sourceUrl: camera.sourceUrl,
       location: camera.location,
-      threshold: 4,
+      threshold: camera.threshold,
       region: 'full',
     };
     applyStation(station);
@@ -767,10 +804,10 @@ export default function OccupancyPage() {
               <div className="rounded-[18px] border border-white/10 bg-slate-950/80 p-4">
                 <div className="flex items-center gap-2">
                   <Camera size={16} className="text-red-700" />
-                  <h3 className="text-base font-black">Public demo cameras</h3>
+                  <h3 className="text-base font-black">AI-ready public camera frames</h3>
                 </div>
                 <p className="mt-2 text-sm text-white/60">
-                  Curated public webcams for demos and smoke tests. They load through the same proxy the app uses for bridge URLs.
+                  Vietnam and global public camera frames for demos and smoke tests. They load through the same proxy the app uses for bridge URLs, then run through the people detector.
                 </p>
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   {PUBLIC_CAMERAS.map(camera => (
@@ -786,6 +823,9 @@ export default function OccupancyPage() {
                           <p className="text-sm font-black">{camera.name}</p>
                           <p className="text-xs text-white/75">{camera.location}</p>
                         </div>
+                        <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-cyan-100">
+                          {camera.sourceNote}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 p-3">
                         <a
@@ -796,6 +836,9 @@ export default function OccupancyPage() {
                         >
                           Open source page
                         </a>
+                        <span className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-1 text-[11px] font-semibold text-white/55">
+                          Limit {camera.threshold}
+                        </span>
                         <ActionButton
                           onClick={() => usePublicCamera(camera)}
                           className="border border-red-600/20 bg-red-600 px-3 py-2 text-xs text-white hover:bg-red-700"
