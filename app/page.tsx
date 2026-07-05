@@ -231,6 +231,89 @@ function presetById(id: string) {
   return presets.find(preset => preset.id === id) || presets[0];
 }
 
+function sanitizeContractTitle(title: string) {
+  const cleaned = title.replace(/[^A-Za-z0-9_]+/g, '');
+  return cleaned || 'GenLayerContract';
+}
+
+function ensureDependsHeader(source: string) {
+  const text = String(source || '').trimStart();
+  if (/Depends"\s*:\s*"py-genlayer:/.test(text)) return source;
+  return `# { "Depends": "py-genlayer:test" }\n\n${text}`;
+}
+
+function appendMethodScaffold(source: string, title: string, kind: 'view' | 'write') {
+  const text = String(source || '').trimEnd();
+  const contractName = sanitizeContractTitle(title);
+  const hasContract = /class\s+\w+\s*\(\s*gl\.Contract\s*\)/.test(text);
+
+  if (!hasContract) {
+    const skeleton = analyzeGenLayerContract('', contractName).skeleton;
+    return kind === 'view' ? skeleton : `${skeleton}\n`;
+  }
+
+  if (kind === 'view' && /@gl\.public\.view/.test(text)) return source;
+  if (kind === 'write' && /@gl\.public\.write/.test(text)) return source;
+
+  const viewBlock = `
+
+    @gl.public.view
+    def status(self) -> str:
+        return getattr(self, "_latest", "")
+`.trimEnd();
+
+  const writeBlock = `
+
+    @gl.public.write
+    def submit(self, payload: str) -> str:
+        self._latest = payload.strip()
+        return self._latest
+`.trimEnd();
+
+  return `${text}\n${kind === 'view' ? viewBlock : writeBlock}\n`;
+}
+
+function buildDirectTestScaffold(title: string, analysis: AnalysisResult) {
+  const contractName = sanitizeContractTitle(title);
+  const writeMethod = analysis.publicWrites[0] || 'submit';
+  const viewMethod = analysis.publicViews[0] || 'status';
+
+  return [
+    'import pytest',
+    '',
+    `from contracts.${contractName.toLowerCase()} import ${contractName}`,
+    '',
+    '',
+    `def test_${contractName.toLowerCase()}_direct_flow():`,
+    `    contract = ${contractName}()`,
+    '',
+    `    if hasattr(contract, "${writeMethod}"):` ,
+    `        getattr(contract, "${writeMethod}")("demo-payload")`,
+    '',
+    `    if hasattr(contract, "${viewMethod}"):` ,
+    `        result = getattr(contract, "${viewMethod}")()`,
+    '        assert result is not None',
+  ].join('\n');
+}
+
+function buildReadmeSnippet(title: string, analysis: AnalysisResult) {
+  return [
+    `## ${sanitizeContractTitle(title)}`,
+    '',
+    analysis.summary,
+    '',
+    `- Verdict: ${analysis.verdict}`,
+    `- Public views: ${analysis.publicViews.length ? analysis.publicViews.join(', ') : 'none detected'}`,
+    `- Public writes: ${analysis.publicWrites.length ? analysis.publicWrites.join(', ') : 'none detected'}`,
+    `- Blueprint tags: ${analysis.blueprintTags.length ? analysis.blueprintTags.join(', ') : 'none detected'}`,
+    '',
+    '### Verification',
+    '- Run local direct tests.',
+    '- Run the deploy path against Studionet.',
+    '- Confirm at least one public view returns stable output for reviewers.',
+  ].join('\n');
+}
+
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -288,6 +371,8 @@ export default function Page() {
   const submissionPack = useMemo(() => createSubmissionPack(analysis, title), [analysis, title]);
   const releaseChecklist = useMemo(() => createReleaseChecklist(analysis, title, forgeDeployment.address, forgeDeployment.tx), [analysis, title]);
   const brief = useMemo(() => generateForgeBrief(source, title), [source, title]);
+  const directTestScaffold = useMemo(() => buildDirectTestScaffold(title, analysis), [analysis, title]);
+  const readmeSnippet = useMemo(() => buildReadmeSnippet(title, analysis), [analysis, title]);
   const methodCount = analysis.publicViews.length + analysis.publicWrites.length;
   const findingCount = analysis.findings.length;
   const currentPreset = presetById(selectedPreset);
@@ -314,6 +399,58 @@ export default function Page() {
   function clearContractSource() {
     setSource('');
     sourceInputRef.current?.focus();
+  }
+
+  function replaceSource(nextSource: string, nextTitle = title) {
+    setTitle(nextTitle);
+    setSource(nextSource);
+    setAnalysis(analyzeGenLayerContract(nextSource, nextTitle));
+    setDiff(compareGenLayerContracts(nextSource, compareSource, nextTitle, 'Comparison'));
+    requestAnimationFrame(() => sourceInputRef.current?.focus());
+  }
+
+  function applyDependsPatch() {
+    replaceSource(ensureDependsHeader(source));
+  }
+
+  function applyViewPatch() {
+    replaceSource(appendMethodScaffold(ensureDependsHeader(source), title, 'view'));
+  }
+
+  function applyWritePatch() {
+    replaceSource(appendMethodScaffold(ensureDependsHeader(source), title, 'write'));
+  }
+
+  function applyQuickFixPack() {
+    const normalizedTitle = sanitizeContractTitle(title);
+    let nextSource = ensureDependsHeader(source);
+
+    if (!/class\s+\w+\s*\(\s*gl\.Contract\s*\)/.test(nextSource)) {
+      nextSource = analyzeGenLayerContract('', normalizedTitle).skeleton;
+    }
+
+    if (!/@gl\.public\.write/.test(nextSource)) {
+      nextSource = appendMethodScaffold(nextSource, normalizedTitle, 'write');
+    }
+
+    if (!/@gl\.public\.view/.test(nextSource)) {
+      nextSource = appendMethodScaffold(nextSource, normalizedTitle, 'view');
+    }
+
+    replaceSource(nextSource, normalizedTitle);
+  }
+
+  function loadHardenedSkeleton() {
+    const normalizedTitle = sanitizeContractTitle(title);
+    replaceSource(analyzeGenLayerContract('', normalizedTitle).skeleton, normalizedTitle);
+  }
+
+  function useCurrentAsBaseline() {
+    setCompareSource(source);
+    setCopyStatus(prev => ({ ...prev, baseline: 'copied' }));
+    window.setTimeout(() => {
+      setCopyStatus(prev => ({ ...prev, baseline: 'idle' }));
+    }, 1200);
   }
 
   function runAnalysis() {
@@ -620,6 +757,60 @@ export default function Page() {
 
           <Panel>
             <div className="flex items-center gap-2">
+              <Code2 size={18} className="text-red-700" />
+              <h3 className="text-xl font-black">Patch studio</h3>
+            </div>
+            <p className="mt-4 rounded-[18px] border border-black/10 bg-black/5 p-4 text-sm text-black/75">
+              Apply builder-grade cleanup fast: add the Depends header, restore missing public methods, generate a safer starter skeleton, and ship test or README scaffolds without leaving the workspace.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <ActionButton onClick={applyQuickFixPack} className="border border-red-600/20 bg-red-600 text-white hover:bg-red-700">
+                <Sparkles size={16} /> Apply quick fix pack
+              </ActionButton>
+              <ActionButton onClick={applyDependsPatch} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <ShieldCheck size={16} /> Add Depends header
+              </ActionButton>
+              <ActionButton onClick={applyViewPatch} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <ArrowUpRight size={16} /> Add public view
+              </ActionButton>
+              <ActionButton onClick={applyWritePatch} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <ArrowRightLeft size={16} /> Add public write
+              </ActionButton>
+              <ActionButton onClick={loadHardenedSkeleton} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <Code2 size={16} /> Load hardened skeleton
+              </ActionButton>
+              <ActionButton onClick={useCurrentAsBaseline} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                <GitCompare size={16} /> {copyStatus.baseline === 'copied' ? 'Baseline updated' : 'Use current as baseline'}
+              </ActionButton>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">Direct test scaffold</p>
+                  <ActionButton onClick={() => copyText('direct-test', directTestScaffold)} className="border border-black/15 bg-white px-3 py-2 text-xs text-black hover:bg-black/5">
+                    <Copy size={14} /> {copyStatus['direct-test'] === 'copied' ? 'Copied' : 'Copy'}
+                  </ActionButton>
+                </div>
+                <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap rounded-[16px] border border-black/10 bg-white p-3 text-[12px] leading-6 text-black/80">
+                  {directTestScaffold}
+                </pre>
+              </div>
+              <div className="rounded-[18px] border border-black/10 bg-black/5 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-black/50">README snippet</p>
+                  <ActionButton onClick={() => copyText('readme-snippet', readmeSnippet)} className="border border-black/15 bg-white px-3 py-2 text-xs text-black hover:bg-black/5">
+                    <Copy size={14} /> {copyStatus['readme-snippet'] === 'copied' ? 'Copied' : 'Copy'}
+                  </ActionButton>
+                </div>
+                <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap rounded-[16px] border border-black/10 bg-white p-3 text-[12px] leading-6 text-black/80">
+                  {readmeSnippet}
+                </pre>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="flex items-center gap-2">
               <Bot size={18} className="text-red-700" />
               <h3 className="text-xl font-black">Builder handoff</h3>
             </div>
@@ -775,6 +966,9 @@ export default function Page() {
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton onClick={useCurrentAsBaseline} className="border border-black/15 bg-white text-black hover:bg-black/5">
+                  <GitCompare size={16} /> {copyStatus.baseline === 'copied' ? 'Baseline updated' : 'Use current as baseline'}
+                </ActionButton>
                 <ActionButton onClick={() => copyText('compare', diff.report)} className="border border-black/15 bg-white text-black hover:bg-black/5">
                   <Copy size={16} /> {copyStatus.compare === 'copied' ? 'Diff copied' : 'Copy diff report'}
                 </ActionButton>

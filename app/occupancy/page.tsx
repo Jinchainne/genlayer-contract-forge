@@ -27,6 +27,7 @@ type SavedSnapshot = OccupancySnapshot & { id: string };
 type CameraMode = 'webcam' | 'snapshot' | 'bridge';
 type ConnectionState = 'idle' | 'testing' | 'ready' | 'error';
 type RegionMode = 'full' | 'upper' | 'lower';
+type DetectionMode = 'strict' | 'balanced' | 'wide';
 type StationProfile = {
   id: string;
   label: string;
@@ -156,6 +157,36 @@ function isDetectionInRegion(box: [number, number, number, number], region: Regi
   return centerY >= frameHeight / 2;
 }
 
+function personConfidenceThreshold(cameraMode: CameraMode, detectionMode: DetectionMode) {
+  if (cameraMode === 'webcam') {
+    if (detectionMode === 'strict') return 0.6;
+    if (detectionMode === 'wide') return 0.42;
+    return 0.5;
+  }
+
+  if (detectionMode === 'strict') return 0.72;
+  if (detectionMode === 'wide') return 0.52;
+  return 0.62;
+}
+
+function matchesPersonShape(
+  bbox: [number, number, number, number],
+  frameWidth: number,
+  frameHeight: number,
+  cameraMode: CameraMode,
+  detectionMode: DetectionMode,
+) {
+  if (cameraMode === 'webcam') return true;
+
+  const [, , width, height] = bbox;
+  const areaRatio = (width * height) / Math.max(frameWidth * frameHeight, 1);
+  const heightToWidth = height / Math.max(width, 1);
+  const minAreaRatio = detectionMode === 'strict' ? 0.0018 : detectionMode === 'wide' ? 0.0007 : 0.0012;
+  const minHeightToWidth = detectionMode === 'strict' ? 1.05 : detectionMode === 'wide' ? 0.7 : 0.85;
+
+  return areaRatio >= minAreaRatio && heightToWidth >= minHeightToWidth && heightToWidth <= 5.5;
+}
+
 export default function OccupancyPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteImageRef = useRef<HTMLImageElement | null>(null);
@@ -177,6 +208,7 @@ export default function OccupancyPage() {
   const [location, setLocation] = useState('Main entrance');
   const [sourceUrl, setSourceUrl] = useState('');
   const [regionMode, setRegionMode] = useState<RegionMode>('full');
+  const [detectionMode, setDetectionMode] = useState<DetectionMode>('strict');
   const [stations, setStations] = useState<StationProfile[]>([]);
   const [selectedStationId, setSelectedStationId] = useState(DEFAULT_STATION_ID);
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
@@ -202,6 +234,7 @@ export default function OccupancyPage() {
         location?: string;
         threshold?: number;
         regionMode?: RegionMode;
+        detectionMode?: DetectionMode;
         stations?: StationProfile[];
         selectedStationId?: string;
       };
@@ -212,6 +245,7 @@ export default function OccupancyPage() {
       if (parsed.location) setLocation(parsed.location);
       if (typeof parsed.threshold === 'number') setThreshold(parsed.threshold);
       if (parsed.regionMode) setRegionMode(parsed.regionMode);
+      if (parsed.detectionMode) setDetectionMode(parsed.detectionMode);
       if (Array.isArray(parsed.stations)) setStations(parsed.stations);
       if (parsed.selectedStationId) setSelectedStationId(parsed.selectedStationId);
     } catch {
@@ -231,11 +265,12 @@ export default function OccupancyPage() {
         location,
         threshold,
         regionMode,
+        detectionMode,
         stations,
         selectedStationId,
       }),
     );
-  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, regionMode, stations, selectedStationId]);
+  }, [history, cameraMode, sourceUrl, sourceLabel, location, threshold, regionMode, detectionMode, stations, selectedStationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -569,17 +604,19 @@ export default function OccupancyPage() {
       canvasRef.current.width = width;
       canvasRef.current.height = height;
 
-      const results = await modelRef.current.detect(input, 20, 0.45);
+      const thresholdScore = personConfidenceThreshold(cameraMode, detectionMode);
+      const results = await modelRef.current.detect(input, 20, thresholdScore);
       const next = results.filter(result => {
-        if (result.class !== 'person' || result.score < 0.45) return false;
+        if (result.class !== 'person' || result.score < thresholdScore) return false;
+        if (!matchesPersonShape(result.bbox, width, height, cameraMode, detectionMode)) return false;
         return isDetectionInRegion(result.bbox, regionMode, height);
       });
       const nextAvg =
-        results.length > 0
-          ? results.reduce((total, item) => total + item.score, 0) / results.length
+        next.length > 0
+          ? next.reduce((total, item) => total + item.score, 0) / next.length
           : 0;
 
-      setDetections(results);
+      setDetections(next);
       setCount(next.length);
       setAvgScore(nextAvg);
 
@@ -597,13 +634,12 @@ export default function OccupancyPage() {
           ctx.stroke();
           ctx.setLineDash([]);
         }
-        results.forEach((result, index) => {
-          const [x, y, width, height] = result.bbox;
-          const isPerson = result.class === 'person';
-          ctx.strokeStyle = isPerson ? '#d61f2c' : 'rgba(0,0,0,0.35)';
-          ctx.fillStyle = isPerson ? '#d61f2c' : 'rgba(0,0,0,0.55)';
-          ctx.strokeRect(x, y, width, height);
-          ctx.fillRect(x, Math.max(0, y - 26), Math.min(width, 260), 22);
+        next.forEach((result, index) => {
+          const [x, y, boxWidth, boxHeight] = result.bbox;
+          ctx.strokeStyle = '#d61f2c';
+          ctx.fillStyle = '#d61f2c';
+          ctx.strokeRect(x, y, boxWidth, boxHeight);
+          ctx.fillRect(x, Math.max(0, y - 26), Math.min(boxWidth, 260), 22);
           ctx.fillStyle = '#fff';
           ctx.fillText(`${index + 1}. ${result.class} ${Math.round(result.score * 100)}%`, x + 8, Math.max(16, y - 9));
         });
@@ -931,6 +967,37 @@ export default function OccupancyPage() {
                     ? 'Runs directly from the browser on this machine.'
                     : 'For RTSP, ONVIF, or vendor cloud cameras, point this field at a bridge that exposes a browser-readable live frame endpoint.'}
                 </p>
+              </div>
+
+              <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Detection mode</span>
+                  <span className="text-xs text-white/55">
+                    {detectionMode === 'strict'
+                      ? 'Best for traffic feeds and public cameras'
+                      : detectionMode === 'balanced'
+                        ? 'General-purpose tracking'
+                        : 'Looser scan for distant people'}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[
+                    { id: 'strict' as const, label: 'Strict' },
+                    { id: 'balanced' as const, label: 'Balanced' },
+                    { id: 'wide' as const, label: 'Wide' },
+                  ].map(option => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setDetectionMode(option.id)}
+                      className={`inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        detectionMode === option.id ? 'border-red-600 bg-red-600 text-white' : 'border-white/10 bg-slate-950/80 text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {cameraMode !== 'webcam' ? (
