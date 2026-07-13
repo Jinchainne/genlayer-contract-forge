@@ -64,10 +64,9 @@ export function buildRegisterCommand(snapshot: OccupancySnapshot, registryAddres
   return [
     `genlayer call ${registryAddress} register_snapshot \\`,
     `  --camera-name "${snapshot.cameraName.replace(/"/g, '\\"')}" \\`,
-    snapshot.region ? `  --region "${snapshot.region.replace(/"/g, '\\"')}" \\` : null,
     `  --location "${snapshot.location.replace(/"/g, '\\"')}" \\`,
     `  --title "${snapshot.title.replace(/"/g, '\\"')}" \\`,
-    `  --count ${snapshot.count} \\`,
+    `  --people-count ${snapshot.count} \\`,
     `  --threshold ${snapshot.threshold} \\`,
     `  --avg-score ${snapshot.avgScore.toFixed(2)} \\`,
     `  --alert-level "${snapshot.alertLevel}" \\`,

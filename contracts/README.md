@@ -46,3 +46,27 @@ npm run verify:contract
 - Deployment tx: `0xfeca3c0dfd4f8f6093086251e90da0cb6863df948c646e3d3999f1ef51b5038d`
 
 The registry has already been bootstrapped with a sample snapshot record.
+
+### Occupancy write method
+
+The deployed occupancy contract exposes a single write method:
+
+```text
+register_snapshot(
+  title,
+  camera_name,
+  location,
+  people_count,
+  threshold,
+  avg_score,
+  alert_level,
+  timestamp,
+  labels
+)
+```
+
+Notes:
+
+- `people_count` is the on-chain numeric field for occupancy
+- `region` is an operator-side monitoring concept and is not part of the deployed contract signature
+- the frontend-generated command is tested to ensure it maps to this write method without sending `--region`

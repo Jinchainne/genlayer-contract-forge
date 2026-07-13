@@ -59,10 +59,10 @@ Core capabilities:
 - connect to enterprise camera infrastructure through a browser-safe bridge URL
 - detect and count people in real time
 - draw live boxes over the active frame
-- support region filtering and stricter public-camera filtering
+- support region-based monitoring in the operator UI and stricter public-camera filtering
 - track frame cadence, session uptime, peak occupancy, and alert events
 - save snapshots manually or on cadence
-- generate a GenLayer packet and chain-ready register command
+- generate a GenLayer packet and a `register_snapshot` command that maps directly to the deployed occupancy contract
 
 This module is designed for practical camera-backed monitoring, not just screenshots.
 
@@ -186,7 +186,7 @@ src/
 - line-based entry / exit counting
 - upper / lower zone rules with separate limits
 - GenLayer packet generation
-- on-chain occupancy register command generation
+- on-chain occupancy register command generation with `people_count`
 
 ## Requirements
 
@@ -404,6 +404,30 @@ Once the bridge is in place, the desk can be used as a lightweight real operatio
 5. monitor count, peak occupancy, and alert events
 6. save snapshots manually or automatically
 7. export the packet or copy the register command for GenLayer
+
+### On-chain occupancy mapping
+
+The occupancy workflow now separates operational metadata from on-chain contract arguments:
+
+- region and zone selection remain part of the UI and human-readable evidence packet
+- the generated GenLayer command maps directly to `contracts/occupancy_registry.py`
+- the on-chain write uses `people_count`, not `count`
+- `region` is not sent on-chain because `register_snapshot` does not define that parameter
+
+Current generated call shape:
+
+```bash
+genlayer call <OCCUPANCY_REGISTRY_ADDRESS> register_snapshot \
+  --camera-name "Lobby Cam" \
+  --location "Main entrance" \
+  --title "Occupancy Snapshot" \
+  --people-count 4 \
+  --threshold 4 \
+  --avg-score 0.82 \
+  --alert-level "WATCH" \
+  --timestamp "2026-07-13T06:22:00.000Z" \
+  --labels "1. person 98%, 2. person 94%"
+```
 
 Suitable real-world use cases:
 

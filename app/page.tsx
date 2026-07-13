@@ -189,14 +189,14 @@ class OccupancyEventRegistry(gl.Contract):
         self._peak = 0
 
     @gl.public.write
-    def register_snapshot(self, location: str, count: int, threshold: int) -> str:
+    def register_snapshot(self, location: str, people_count: int, threshold: int) -> str:
         def evaluate():
-            status = "alert" if count > threshold else "watch" if count == threshold else "normal"
-            return f"{location}:{count}:{threshold}:{status}"
+            status = "alert" if people_count > threshold else "watch" if people_count == threshold else "normal"
+            return f"{location}:{people_count}:{threshold}:{status}"
 
         result = gl.eq_principle_strict_eq(evaluate)
         self._latest = result
-        self._peak = count if count > self._peak else self._peak
+        self._peak = people_count if people_count > self._peak else self._peak
         return result
 
     @gl.public.view
